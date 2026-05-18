@@ -417,13 +417,13 @@ function openCaseDialog(id, intakeItem) {
   document.querySelector("#owner").value = item?.owner ?? "";
   document.querySelector("#owner").value = item?.owner ?? intakeItem?.owner ?? "";
   document.querySelector("#disputeType").value = item?.disputeType ?? intakeItem?.disputeType ?? guessDisputeType(intakeItem?.claim) ?? "工資";
-  document.querySelector("#reportCategory").value = item?.reportCategory ?? intakeItem?.reportCategory ?? "mediator";
+  document.querySelector("#reportCategory").value = item?.reportCategory ?? intakeItem?.mediationMethodCode?.split(" - ")[0] ?? intakeItem?.reportCategory ?? "";
   document.querySelector("#workerGender").value = item?.workerGender ?? intakeItem?.workerGender ?? "";
   document.querySelector("#workerAge").value = item?.workerAge ?? intakeItem?.workerAge ?? "";
   document.querySelector("#maleCount").value = item?.maleCount ?? intakeItem?.maleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "男");
   document.querySelector("#femaleCount").value = item?.femaleCount ?? intakeItem?.femaleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "女");
   document.querySelector("#specialCaseType").value = item?.specialCaseType ?? intakeItem?.specialCaseType ?? "";
-  document.querySelector("#mediationMethodCode").value = item?.mediationMethodCode ?? intakeItem?.mediationMethodCode ?? "";
+  document.querySelector("#mediationMethodCode").value = item?.mediationMethodCode ?? intakeItem?.mediationMethodCode ?? document.querySelector("#reportCategory").value ?? "";
   document.querySelector("#caseStatus").value = item?.status ?? "scheduled";
   document.querySelector("#notes").value = item?.notes ?? buildIntakeNotes(intakeItem) ?? "";
   toggleOtherRoom();
