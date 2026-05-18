@@ -1,0 +1,880 @@
+const statusLabels = {
+  scheduled: "已排定",
+  changed: "改期",
+  withdrawn: "撤回",
+  cancelled: "取消",
+  finished: "完成",
+};
+
+const reportCategoryLabels = {
+  mediator: "調解人",
+  committee: "調解委員會",
+  arbitration: "仲裁人(委員會)",
+  transfer: "轉外縣市/中科/加工區",
+  laborAssocCity: "台中市勞資關係協會",
+  laborAssocCounty: "台中縣勞資關係協會",
+  laborEmploymentAssoc: "台中市勞雇關係協會",
+  occupationalInjuryAssoc: "職業災害法律權益服務協會",
+  bureau: "本局召開",
+};
+
+const roomNameMap = {
+  調解會議室: "晤談室(一)",
+  第一會議室: "晤談室(二)",
+  第二會議室: "晤談室(三)",
+  晤談1: "晤談室(一)",
+  晤談2: "晤談室(二)",
+  晤談3: "晤談室(三)",
+  晤談4: "晤談室(四)",
+  惠中602: "其他",
+  線上會議: "其他",
+};
+
+const fixedRooms = ["晤談室(一)", "晤談室(二)", "晤談室(三)", "晤談室(四)", "勞資爭議調解會議室"];
+
+const timeSlots = ["09:00", "10:30", "13:30", "15:00"];
+const weekdayNames = ["週一", "週二", "週三", "週四", "週五"];
+const storageKey = "mediation-scheduler-cases";
+const intakeSource = "data/intake-2026-05-15.json";
+const applicationBatchSource = "data/application-batch.json";
+const supabaseConfig = window.APP_SUPABASE_CONFIG || {};
+const supabaseClient =
+  window.supabase && supabaseConfig.url && supabaseConfig.anonKey
+    ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey)
+    : null;
+
+const sampleCases = [
+  {
+    id: crypto.randomUUID(),
+    sourceCaseNo: "",
+    caseNo: "115-H-00041",
+    meetingDate: "2026-05-18",
+    meetingTime: "09:00",
+    room: "晤談室(一)",
+    worker: "王○○",
+    employer: "甲○公司",
+    mediator: "林委員",
+    recorder: "李紀錄",
+    owner: "陳承辦",
+    disputeType: "工資",
+    reportCategory: "mediator",
+    workerGender: "男",
+    workerAge: "35",
+    maleCount: "1",
+    femaleCount: "0",
+    specialCaseType: "無",
+    mediationMethodCode: "H - 指派調解人",
+    status: "scheduled",
+    notes: "電話通知完成",
+  },
+  {
+    id: crypto.randomUUID(),
+    sourceCaseNo: "",
+    caseNo: "115-H-00052",
+    meetingDate: "2026-05-18",
+    meetingTime: "10:30",
+    room: "晤談室(二)",
+    worker: "李○○",
+    employer: "乙○企業",
+    mediator: "黃委員",
+    recorder: "王紀錄",
+    owner: "張承辦",
+    disputeType: "資遣費",
+    reportCategory: "mediator",
+    workerGender: "女",
+    workerAge: "42",
+    maleCount: "0",
+    femaleCount: "1",
+    specialCaseType: "無",
+    mediationMethodCode: "H - 指派調解人",
+    status: "changed",
+    notes: "原 5/15 改期",
+  },
+  {
+    id: crypto.randomUUID(),
+    sourceCaseNo: "",
+    caseNo: "115-H-00073",
+    meetingDate: "2026-05-19",
+    meetingTime: "13:30",
+    room: "晤談室(三)",
+    worker: "周○○",
+    employer: "丙○商行",
+    mediator: "吳委員",
+    recorder: "協會指派",
+    owner: "陳承辦",
+    disputeType: "解僱",
+    reportCategory: "laborEmploymentAssoc",
+    workerGender: "男",
+    workerAge: "48",
+    maleCount: "1",
+    femaleCount: "0",
+    specialCaseType: "無",
+    mediationMethodCode: "E - 台中市勞雇關係協會",
+    status: "scheduled",
+    notes: "",
+  },
+  {
+    id: crypto.randomUUID(),
+    sourceCaseNo: "",
+    caseNo: "115-H-00088",
+    meetingDate: "2026-05-20",
+    meetingTime: "15:00",
+    room: "晤談室(四)",
+    worker: "劉○○",
+    employer: "丁○公司",
+    mediator: "林委員",
+    recorder: "李紀錄",
+    owner: "許承辦",
+    disputeType: "職災",
+    reportCategory: "occupationalInjuryAssoc",
+    workerGender: "女",
+    workerAge: "51",
+    maleCount: "0",
+    femaleCount: "1",
+    specialCaseType: "職業災害",
+    mediationMethodCode: "J - 臺中市職業災害法律服務協會",
+    status: "withdrawn",
+    notes: "申請人撤回",
+  },
+];
+
+let cases = loadCases();
+let intakeCases = [];
+let applicationBatchCases = [];
+let selectedWeekStart = startOfWeek(new Date());
+
+const elements = {
+  weekPicker: document.querySelector("#weekPicker"),
+  keyword: document.querySelector("#keyword"),
+  statusFilter: document.querySelector("#statusFilter"),
+  calendar: document.querySelector("#calendar"),
+  caseList: document.querySelector("#caseList"),
+  intakeList: document.querySelector("#intakeList"),
+  intakeSummary: document.querySelector("#intakeSummary"),
+  weekRange: document.querySelector("#weekRange"),
+  totalCount: document.querySelector("#totalCount"),
+  roomCount: document.querySelector("#roomCount"),
+  changedCount: document.querySelector("#changedCount"),
+  mediatorCount: document.querySelector("#mediatorCount"),
+  dialog: document.querySelector("#caseDialog"),
+  form: document.querySelector("#caseForm"),
+  dialogTitle: document.querySelector("#dialogTitle"),
+  conflictWarning: document.querySelector("#conflictWarning"),
+  deleteCase: document.querySelector("#deleteCase"),
+};
+
+document.querySelector("#newCase").addEventListener("click", () => openCaseDialog());
+document.querySelector("#reloadIntake").addEventListener("click", loadIntakeCases);
+document.querySelector("#closeDialog").addEventListener("click", closeDialog);
+document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
+document.querySelector("#exportCsv").addEventListener("click", exportCsv);
+document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
+elements.weekPicker.addEventListener("change", handleWeekChange);
+elements.keyword.addEventListener("input", render);
+elements.statusFilter.addEventListener("change", render);
+elements.form.addEventListener("submit", saveCase);
+elements.deleteCase.addEventListener("click", deleteCurrentCase);
+
+["meetingDate", "meetingTime", "room", "mediator"].forEach((id) => {
+  document.querySelector(`#${id}`).addEventListener("change", updateConflictWarning);
+});
+document.querySelector("#room").addEventListener("change", toggleOtherRoom);
+
+initialize();
+
+function initialize() {
+  elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
+  loadRemoteCases();
+  loadIntakeCases();
+  render();
+}
+
+async function loadRemoteCases() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("mediation_schedules")
+    .select("*")
+    .order("meeting_date", { ascending: true })
+    .order("meeting_time", { ascending: true });
+
+  if (error) {
+    console.warn("Supabase load failed; using local data", error);
+    return;
+  }
+
+  cases = data.map(fromDbCase);
+  persist();
+  render();
+}
+
+function loadCases() {
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) {
+    localStorage.setItem(storageKey, JSON.stringify(sampleCases));
+    return sampleCases;
+  }
+  try {
+    const parsed = JSON.parse(saved);
+    const normalized = parsed.map((item) => ({
+      ...item,
+      room: normalizeRoom(item.room).room,
+      roomOther: normalizeRoom(item.room).roomOther || item.roomOther || "",
+    }));
+    localStorage.setItem(storageKey, JSON.stringify(normalized));
+    return normalized;
+  } catch {
+    return sampleCases;
+  }
+}
+
+async function loadIntakeCases() {
+  const [intake, batch] = await Promise.all([loadJson(intakeSource), loadJson(applicationBatchSource)]);
+  applicationBatchCases = batch.map(normalizeBatchItem);
+  intakeCases = mergeIntakeSources(intake, applicationBatchCases);
+  renderIntakeList();
+}
+
+async function loadJson(source) {
+  try {
+    const response = await fetch(source, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Cannot load ${source}`);
+    return await response.json();
+  } catch {
+    return [];
+  }
+}
+
+function persist() {
+  localStorage.setItem(storageKey, JSON.stringify(cases));
+}
+
+function render() {
+  const weekDates = Array.from({ length: 5 }, (_, index) => addDays(selectedWeekStart, index));
+  const filtered = getFilteredCases();
+  elements.weekRange.textContent = `${formatDate(weekDates[0])} 至 ${formatDate(weekDates[4])}`;
+  renderStats(filtered);
+  renderIntakeList();
+  renderCalendar(weekDates, filtered);
+  renderCaseList(filtered);
+}
+
+function renderStats(filtered) {
+  elements.totalCount.textContent = filtered.length;
+  elements.roomCount.textContent = new Set(filtered.map((item) => item.room)).size;
+  elements.changedCount.textContent = filtered.filter((item) =>
+    ["changed", "withdrawn", "cancelled"].includes(item.status)
+  ).length;
+  elements.mediatorCount.textContent = new Set(filtered.map((item) => item.mediator)).size;
+}
+
+function renderIntakeList() {
+  const scheduledSourceNos = new Set(cases.map((item) => item.sourceCaseNo).filter(Boolean));
+  const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo));
+  elements.intakeSummary.textContent = `共 ${intakeCases.length} 筆，尚待排程 ${waiting.length} 筆；批次輸入補充 ${applicationBatchCases.length} 筆`;
+  elements.intakeList.innerHTML = "";
+
+  if (waiting.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = intakeCases.length ? "本批收案都已建立排程" : "尚未匯入收案資料";
+    elements.intakeList.append(empty);
+    return;
+  }
+
+  waiting.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "intake-card";
+    card.innerHTML = `
+      <strong>${escapeHtml(item.customCaseNo || item.sourceCaseNo)}｜${escapeHtml(item.worker)}</strong>
+      <span>${escapeHtml(item.employer)}</span>
+      <span>收件：${escapeHtml(item.receivedDate)}　方式：${escapeHtml(item.acceptanceMethod)}</span>
+      <span>${escapeHtml(item.claim || item.disputeType || "未填請求事項")}</span>
+      <span>${escapeHtml(item.workerGender || "性別未填")}　${escapeHtml(item.workerAge ? `${item.workerAge}歲` : "年齡未填")}　${escapeHtml(reportCategoryLabels[item.reportCategory] || "")}</span>
+    `;
+    const button = document.createElement("button");
+    button.className = "primary-button";
+    button.type = "button";
+    button.textContent = "安排";
+    button.addEventListener("click", () => openCaseDialog(null, item));
+    card.append(button);
+    elements.intakeList.append(card);
+  });
+}
+
+function renderCalendar(weekDates, filtered) {
+  elements.calendar.innerHTML = "";
+  elements.calendar.append(createCell("", "day-head"));
+  weekDates.forEach((date, index) => {
+    elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
+  });
+
+  timeSlots.forEach((slot) => {
+    elements.calendar.append(createCell(slot, "time-cell"));
+    weekDates.forEach((date) => {
+      const cell = createCell("", "calendar-cell");
+      const dateKey = toDateInputValue(date);
+      filtered
+        .filter((item) => item.meetingDate === dateKey && item.meetingTime === slot)
+        .sort((a, b) => a.caseNo.localeCompare(b.caseNo))
+        .forEach((item) => cell.append(createCaseCard(item)));
+      elements.calendar.append(cell);
+    });
+  });
+}
+
+function renderCaseList(filtered) {
+  elements.caseList.innerHTML = "";
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "目前沒有符合條件的案件";
+    elements.caseList.append(empty);
+    return;
+  }
+
+  filtered
+    .slice()
+    .sort((a, b) => `${a.meetingDate} ${a.meetingTime}`.localeCompare(`${b.meetingDate} ${b.meetingTime}`))
+    .forEach((item) => {
+      const button = document.createElement("button");
+      button.className = "list-item";
+      button.type = "button";
+      button.innerHTML = `
+        <strong>${escapeHtml(item.caseNo)}｜${escapeHtml(statusLabels[item.status])}</strong>
+        <span>${escapeHtml(item.meetingDate)} ${escapeHtml(item.meetingTime)}　${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</span>
+        <span>${escapeHtml(item.room)}　${escapeHtml(item.mediator)}　${escapeHtml(item.owner)}</span>
+      `;
+      button.addEventListener("click", () => openCaseDialog(item.id));
+      elements.caseList.append(button);
+    });
+}
+
+function createCaseCard(item) {
+  const button = document.createElement("button");
+  button.className = `case-card ${item.status}`;
+  button.type = "button";
+  button.innerHTML = `
+    <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
+    <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
+    <small>${escapeHtml(item.room)}｜${escapeHtml(item.mediator)}</small>
+  `;
+  button.addEventListener("click", () => openCaseDialog(item.id));
+  return button;
+}
+
+function createCell(text, className) {
+  const cell = document.createElement("div");
+  cell.className = className;
+  cell.textContent = text;
+  return cell;
+}
+
+function getFilteredCases() {
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const keyword = elements.keyword.value.trim().toLowerCase();
+  const status = elements.statusFilter.value;
+
+  return cases.filter((item) => {
+    const date = parseDate(item.meetingDate);
+    const inWeek = date >= selectedWeekStart && date <= weekEnd;
+    const inStatus = status === "all" || item.status === status;
+    const text = [
+      item.sourceCaseNo,
+      item.caseNo,
+      item.worker,
+      item.employer,
+      item.mediator,
+      item.recorder,
+      item.owner,
+      item.room,
+      item.notes,
+    ]
+      .join(" ")
+      .toLowerCase();
+    const inKeyword = !keyword || text.includes(keyword);
+    return inWeek && inStatus && inKeyword;
+  });
+}
+
+function openCaseDialog(id, intakeItem) {
+  elements.form.reset();
+  elements.conflictWarning.hidden = true;
+  const item = cases.find((entry) => entry.id === id);
+  elements.dialogTitle.textContent = item ? "編輯排程" : "新增排程";
+  elements.deleteCase.hidden = !item;
+  document.querySelector("#caseId").value = item?.id ?? "";
+  document.querySelector("#sourceCaseNo").value = item?.sourceCaseNo ?? intakeItem?.sourceCaseNo ?? "";
+  document.querySelector("#caseNo").value = item?.caseNo ?? intakeItem?.customCaseNo ?? "";
+  document.querySelector("#meetingDate").value = item?.meetingDate ?? toDateInputValue(selectedWeekStart);
+  document.querySelector("#meetingTime").value = item?.meetingTime ?? "09:00";
+  const roomValue = normalizeRoom(item?.room);
+  document.querySelector("#room").value = roomValue.room ?? "晤談室(一)";
+  document.querySelector("#roomOther").value = item?.roomOther ?? roomValue.roomOther ?? "";
+  document.querySelector("#worker").value = item?.worker ?? intakeItem?.worker ?? "";
+  document.querySelector("#employer").value = item?.employer ?? intakeItem?.employer ?? "";
+  document.querySelector("#mediator").value = item?.mediator ?? "";
+  document.querySelector("#recorder").value = item?.recorder ?? "";
+  document.querySelector("#owner").value = item?.owner ?? "";
+  document.querySelector("#owner").value = item?.owner ?? intakeItem?.owner ?? "";
+  document.querySelector("#disputeType").value = item?.disputeType ?? intakeItem?.disputeType ?? guessDisputeType(intakeItem?.claim) ?? "工資";
+  document.querySelector("#reportCategory").value = item?.reportCategory ?? intakeItem?.reportCategory ?? "mediator";
+  document.querySelector("#workerGender").value = item?.workerGender ?? intakeItem?.workerGender ?? "";
+  document.querySelector("#workerAge").value = item?.workerAge ?? intakeItem?.workerAge ?? "";
+  document.querySelector("#maleCount").value = item?.maleCount ?? intakeItem?.maleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "男");
+  document.querySelector("#femaleCount").value = item?.femaleCount ?? intakeItem?.femaleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "女");
+  document.querySelector("#specialCaseType").value = item?.specialCaseType ?? intakeItem?.specialCaseType ?? "";
+  document.querySelector("#mediationMethodCode").value = item?.mediationMethodCode ?? intakeItem?.mediationMethodCode ?? "";
+  document.querySelector("#caseStatus").value = item?.status ?? "scheduled";
+  document.querySelector("#notes").value = item?.notes ?? buildIntakeNotes(intakeItem) ?? "";
+  toggleOtherRoom();
+  updateConflictWarning();
+  elements.dialog.showModal();
+}
+
+function closeDialog() {
+  elements.dialog.close();
+}
+
+async function saveCase(event) {
+  event.preventDefault();
+  const id = document.querySelector("#caseId").value || crypto.randomUUID();
+  const next = {
+    id,
+    sourceCaseNo: document.querySelector("#sourceCaseNo").value.trim(),
+    caseNo: document.querySelector("#caseNo").value.trim(),
+    meetingDate: document.querySelector("#meetingDate").value,
+    meetingTime: document.querySelector("#meetingTime").value,
+    room: document.querySelector("#room").value,
+    roomOther: document.querySelector("#room").value === "其他" ? document.querySelector("#roomOther").value.trim() : "",
+    worker: document.querySelector("#worker").value.trim(),
+    employer: document.querySelector("#employer").value.trim(),
+    mediator: document.querySelector("#mediator").value.trim(),
+    recorder: document.querySelector("#recorder").value.trim(),
+    owner: document.querySelector("#owner").value.trim(),
+    disputeType: document.querySelector("#disputeType").value,
+    reportCategory: document.querySelector("#reportCategory").value,
+    workerGender: document.querySelector("#workerGender").value,
+    workerAge: document.querySelector("#workerAge").value,
+    maleCount: document.querySelector("#maleCount").value,
+    femaleCount: document.querySelector("#femaleCount").value,
+    specialCaseType: document.querySelector("#specialCaseType").value.trim(),
+    mediationMethodCode: document.querySelector("#mediationMethodCode").value.trim(),
+    status: document.querySelector("#caseStatus").value,
+    notes: document.querySelector("#notes").value.trim(),
+  };
+
+  const index = cases.findIndex((item) => item.id === id);
+  if (index >= 0) {
+    cases[index] = next;
+  } else {
+    cases.push(next);
+  }
+  await saveRemoteCase(next);
+  selectedWeekStart = startOfWeek(parseDate(next.meetingDate));
+  elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
+  persist();
+  closeDialog();
+  render();
+}
+
+async function deleteCurrentCase() {
+  const id = document.querySelector("#caseId").value;
+  cases = cases.filter((item) => item.id !== id);
+  await deleteRemoteCase(id);
+  persist();
+  closeDialog();
+  render();
+}
+
+function updateConflictWarning() {
+  const id = document.querySelector("#caseId").value;
+  const meetingDate = document.querySelector("#meetingDate").value;
+  const meetingTime = document.querySelector("#meetingTime").value;
+  const room = document.querySelector("#room").value;
+  const roomOther = document.querySelector("#roomOther").value.trim();
+  const roomForConflict = room === "其他" ? roomOther || room : room;
+  const mediator = document.querySelector("#mediator").value.trim();
+
+  const conflicts = cases.filter((item) => {
+    if (item.id === id) return false;
+    if (item.meetingDate !== meetingDate || item.meetingTime !== meetingTime) return false;
+    return displayRoom(item) === roomForConflict || (mediator && item.mediator === mediator);
+  });
+
+  if (!conflicts.length) {
+    elements.conflictWarning.hidden = true;
+    return;
+  }
+
+  elements.conflictWarning.hidden = false;
+  elements.conflictWarning.textContent = `提醒：此時段已有 ${conflicts.length} 筆可能衝突的排程，請確認會議室或調解人。`;
+}
+
+function exportCsv() {
+  const rows = [
+    ["來源案件編號", "案號", "日期", "時間", "會議室", "勞方", "資方", "調解人", "紀錄", "承辦人", "爭議類型", "週報分類", "勞方性別", "勞方年齡", "男性人數", "女性人數", "特殊案件類型", "調解方式代碼", "狀態", "備註"],
+    ...getFilteredCases().map((item) => [
+      item.sourceCaseNo,
+      item.caseNo,
+      item.meetingDate,
+      item.meetingTime,
+      displayRoom(item),
+      item.worker,
+      item.employer,
+      item.mediator,
+      item.recorder,
+      item.owner,
+      item.disputeType,
+      reportCategoryLabels[item.reportCategory] ?? item.reportCategory,
+      item.workerGender,
+      item.workerAge,
+      item.maleCount,
+      item.femaleCount,
+      item.specialCaseType,
+      item.mediationMethodCode,
+      statusLabels[item.status],
+      item.notes,
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `調解會議排程_${toDateInputValue(selectedWeekStart)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportWeeklyReport() {
+  const rows = getFilteredCases()
+    .slice()
+    .sort((a, b) => `${a.meetingDate} ${a.meetingTime} ${a.room}`.localeCompare(`${b.meetingDate} ${b.meetingTime} ${b.room}`));
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
+  const dispatcher = "";
+  const counts = buildWeeklyCounts(rows);
+  const detailRows = rows.map((item) => [
+    formatDate(parseDate(item.meetingDate)),
+    getWeekdayName(parseDate(item.meetingDate)),
+    displayRoom(item),
+    item.meetingTime.replace(":", ""),
+    ["withdrawn", "cancelled"].includes(item.status) ? statusLabels[item.status] : item.worker,
+    ["withdrawn", "cancelled"].includes(item.status) ? "" : item.employer,
+    ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
+    item.owner,
+    item.mediator,
+    item.recorder,
+    item.notes,
+  ]);
+
+  const detailTable = tableHtml([
+    ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
+    ...detailRows,
+  ]);
+  const countTable = tableHtml([
+    ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
+    [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
+  ]);
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: "Microsoft JhengHei", Arial, sans-serif; }
+          h1 { text-align: center; font-size: 20px; }
+          .meta { display: flex; justify-content: space-between; margin: 8px 0 12px; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+          th, td { border: 1px solid #333; padding: 6px; font-size: 12px; vertical-align: middle; }
+          th { background: #e8eef5; font-weight: 700; text-align: center; }
+          .count-title { font-weight: 700; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <h1>勞資爭議調解(仲裁)會議週報表</h1>
+        <div class="meta">
+          <span>日期：${escapeHtml(reportTitle)}</span>
+          <span>案件數：共${rows.length}件</span>
+          <span>本週派案人員：${escapeHtml(dispatcher)}</span>
+        </div>
+        ${detailTable}
+        <div class="count-title">件數統計</div>
+        ${countTable}
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function handleWeekChange(event) {
+  selectedWeekStart = weekValueToDate(event.target.value);
+  render();
+}
+
+function startOfWeek(date) {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function parseDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function toDateInputValue(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatDate(date) {
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function formatMonthDay(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function dateToWeekValue(date) {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+  return `${target.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function weekValueToDate(value) {
+  const [yearText, weekText] = value.split("-W");
+  const year = Number(yearText);
+  const week = Number(weekText);
+  const simple = new Date(year, 0, 1 + (week - 1) * 7);
+  return startOfWeek(simple);
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function normalizeRoom(room) {
+  if (!room) return { room: "晤談室(一)", roomOther: "" };
+  const mapped = roomNameMap[room] ?? room;
+  if (fixedRooms.includes(mapped) || mapped === "其他") {
+    return { room: mapped, roomOther: mapped === "其他" && !roomNameMap[room] ? room : "" };
+  }
+  return { room: "其他", roomOther: room };
+}
+
+function displayRoom(item) {
+  return item.room === "其他" ? item.roomOther || "其他" : item.room;
+}
+
+function toggleOtherRoom() {
+  const isOther = document.querySelector("#room").value === "其他";
+  document.querySelector("#roomOtherLabel").hidden = !isOther;
+  document.querySelector("#roomOther").required = isOther;
+}
+
+function tableHtml(rows) {
+  return `<table>${rows
+    .map((row, rowIndex) => `<tr>${row.map((cell) => `${rowIndex === 0 ? "<th>" : "<td>"}${escapeHtml(cell ?? "")}${rowIndex === 0 ? "</th>" : "</td>"}`).join("")}</tr>`)
+    .join("")}</table>`;
+}
+
+function buildWeeklyCounts(rows) {
+  const counts = Object.fromEntries(Object.keys(reportCategoryLabels).map((key) => [key, 0]));
+  counts.male = 0;
+  counts.female = 0;
+  counts.middleAged = 0;
+  rows.forEach((item) => {
+    const key = item.reportCategory || "mediator";
+    counts[key] = (counts[key] || 0) + 1;
+    counts.male += toNumber(item.maleCount) || inferGenderCount(item.workerGender, "男");
+    counts.female += toNumber(item.femaleCount) || inferGenderCount(item.workerGender, "女");
+    if (toNumber(item.workerAge) >= 45) counts.middleAged += 1;
+  });
+  return counts;
+}
+
+function toMinguoDate(date) {
+  return `${date.getFullYear() - 1911}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getWeekdayName(date) {
+  const day = date.getDay();
+  return ["週日", "週一", "週二", "週三", "週四", "週五", "週六"][day];
+}
+
+async function saveRemoteCase(item) {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient
+    .from("mediation_schedules")
+    .upsert(toDbCase(item), { onConflict: "id" });
+
+  if (error) {
+    alert(`Supabase 儲存失敗：${error.message}`);
+  }
+}
+
+async function deleteRemoteCase(id) {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.from("mediation_schedules").delete().eq("id", id);
+  if (error) {
+    alert(`Supabase 刪除失敗：${error.message}`);
+  }
+}
+
+function toDbCase(item) {
+  return {
+    id: item.id,
+    source_case_no: item.sourceCaseNo || null,
+    case_no: item.caseNo,
+    meeting_date: item.meetingDate,
+    meeting_time: item.meetingTime,
+    room: item.room,
+    room_other: item.roomOther || null,
+    worker: item.worker,
+    employer: item.employer,
+    mediator: item.mediator || null,
+    recorder: item.recorder || null,
+    owner: item.owner || null,
+    dispute_type: item.disputeType || null,
+    report_category: item.reportCategory || null,
+    worker_gender: item.workerGender || null,
+    worker_age: item.workerAge ? Number(item.workerAge) : null,
+    male_count: item.maleCount ? Number(item.maleCount) : 0,
+    female_count: item.femaleCount ? Number(item.femaleCount) : 0,
+    special_case_type: item.specialCaseType || null,
+    mediation_method_code: item.mediationMethodCode || null,
+    status: item.status || "scheduled",
+    notes: item.notes || null,
+  };
+}
+
+function fromDbCase(row) {
+  return {
+    id: row.id,
+    sourceCaseNo: row.source_case_no || "",
+    caseNo: row.case_no || "",
+    meetingDate: row.meeting_date || "",
+    meetingTime: row.meeting_time || "",
+    room: row.room || "晤談室(一)",
+    roomOther: row.room_other || "",
+    worker: row.worker || "",
+    employer: row.employer || "",
+    mediator: row.mediator || "",
+    recorder: row.recorder || "",
+    owner: row.owner || "",
+    disputeType: row.dispute_type || "其他",
+    reportCategory: row.report_category || "mediator",
+    workerGender: row.worker_gender || "",
+    workerAge: row.worker_age ?? "",
+    maleCount: row.male_count ?? 0,
+    femaleCount: row.female_count ?? 0,
+    specialCaseType: row.special_case_type || "",
+    mediationMethodCode: row.mediation_method_code || "",
+    status: row.status || "scheduled",
+    notes: row.notes || "",
+  };
+}
+
+function guessDisputeType(claim = "") {
+  if (claim.includes("資遣")) return "資遣費";
+  if (claim.includes("職災")) return "職災";
+  if (claim.includes("解僱")) return "解僱";
+  if (claim.includes("退休")) return "退休金";
+  if (claim.includes("工資") || claim.includes("加班")) return "工資";
+  return "其他";
+}
+
+function normalizeBatchItem(item) {
+  return {
+    ...item,
+    sourceCaseNo: `batch-${item.batchNo || item.worker || crypto.randomUUID()}`,
+    customCaseNo: item.batchNo ? `批次${item.batchNo}` : "",
+    claim: [item.claim1, item.claim2, item.claim3].filter(Boolean).join("、"),
+    acceptanceMethod: item.acceptanceMethod || "",
+    receivedDate: item.receivedDate || "",
+    reportCategory: item.reportCategory || reportCategoryFromMethod(item.mediationMethodCode),
+  };
+}
+
+function mergeIntakeSources(intake, batch) {
+  const batchByPeople = new Map(
+    batch.map((item) => [`${item.worker}||${item.employer}`, item])
+  );
+  const merged = intake.map((item) => {
+    const match = batchByPeople.get(`${item.worker}||${item.employer}`);
+    if (!match) return item;
+    return {
+      ...item,
+      ...match,
+      sourceCaseNo: item.sourceCaseNo || match.sourceCaseNo,
+      customCaseNo: item.customCaseNo || match.customCaseNo,
+      claim: item.claim || match.claim,
+      receivedDate: item.receivedDate || match.receivedDate,
+    };
+  });
+  const intakePeople = new Set(intake.map((item) => `${item.worker}||${item.employer}`));
+  const batchOnly = batch.filter((item) => !intakePeople.has(`${item.worker}||${item.employer}`));
+  return [...merged, ...batchOnly];
+}
+
+function reportCategoryFromMethod(method = "") {
+  const text = String(method);
+  if (text.startsWith("F")) return "committee";
+  if (text.startsWith("I")) return "arbitration";
+  if (text.startsWith("G")) return "transfer";
+  if (text.startsWith("A") || text.startsWith("AH")) return "laborAssocCity";
+  if (text.startsWith("B") || text.startsWith("BH")) return "laborAssocCounty";
+  if (text.startsWith("E") || text.startsWith("EH")) return "laborEmploymentAssoc";
+  if (text.startsWith("J") || text.startsWith("JH")) return "occupationalInjuryAssoc";
+  return "mediator";
+}
+
+function inferGenderCount(gender, target) {
+  return gender === target ? 1 : 0;
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function buildIntakeNotes(item) {
+  if (!item) return "";
+  const parts = [];
+  if (item.claim) parts.push(item.claim);
+  if (item.mediationMethodCode) parts.push(item.mediationMethodCode);
+  if (item.mediationLocation) parts.push(`原填地點：${item.mediationLocation}`);
+  if (item.specialCaseType && item.specialCaseType !== "無") parts.push(`特殊案件：${item.specialCaseType}`);
+  return parts.join("；");
+}

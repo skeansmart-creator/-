@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>調解會議排程系統</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">勞資爭議調解</p>
+        <h1>會議排程管理</h1>
+      </div>
+      <div class="header-actions">
+        <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
+        <button id="exportWeeklyReport" class="secondary-button" type="button">產出週報表</button>
+        <button id="newCase" class="primary-button" type="button">新增排程</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="toolbar" aria-label="查詢工具">
+        <label>
+          週別
+          <input id="weekPicker" type="week" />
+        </label>
+        <label>
+          關鍵字
+          <input id="keyword" type="search" placeholder="案號、當事人、調解人" />
+        </label>
+        <label>
+          狀態
+          <select id="statusFilter">
+            <option value="all">全部</option>
+            <option value="scheduled">已排定</option>
+            <option value="changed">改期</option>
+            <option value="withdrawn">撤回</option>
+            <option value="cancelled">取消</option>
+            <option value="finished">完成</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="intake-panel">
+        <div class="panel-title">
+          <div>
+            <h2>待排案件</h2>
+            <p id="intakeSummary">讀取收案資料中</p>
+          </div>
+          <button id="reloadIntake" class="secondary-button" type="button">重新讀取</button>
+        </div>
+        <div id="intakeList" class="intake-list"></div>
+      </section>
+
+      <section class="stats" aria-label="統計摘要">
+        <article>
+          <span id="totalCount">0</span>
+          <p>本週會議</p>
+        </article>
+        <article>
+          <span id="roomCount">0</span>
+          <p>使用會議室</p>
+        </article>
+        <article>
+          <span id="changedCount">0</span>
+          <p>改期/取消/撤回</p>
+        </article>
+        <article>
+          <span id="mediatorCount">0</span>
+          <p>調解人</p>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <div class="calendar-panel">
+          <div class="panel-title">
+            <h2>週排程</h2>
+            <p id="weekRange"></p>
+          </div>
+          <div id="calendar" class="calendar" aria-label="週排程表"></div>
+        </div>
+
+        <aside class="side-panel">
+          <div class="panel-title">
+            <h2>案件清單</h2>
+            <p>點選案件可編輯</p>
+          </div>
+          <div id="caseList" class="case-list"></div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="caseDialog">
+      <form id="caseForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="dialogTitle">新增排程</h2>
+          <button id="closeDialog" class="icon-button" type="button" aria-label="關閉">×</button>
+        </div>
+
+        <input id="caseId" type="hidden" />
+        <div class="form-grid">
+          <label>
+            來源案件編號
+            <input id="sourceCaseNo" readonly />
+          </label>
+          <label>
+            案號
+            <input id="caseNo" required />
+          </label>
+          <label>
+            日期
+            <input id="meetingDate" type="date" required />
+          </label>
+          <label>
+            時間
+            <input id="meetingTime" type="time" required />
+          </label>
+          <label>
+            會議室
+            <select id="room" required>
+              <option>晤談室(一)</option>
+              <option>晤談室(二)</option>
+              <option>晤談室(三)</option>
+              <option>晤談室(四)</option>
+              <option>勞資爭議調解會議室</option>
+              <option>其他</option>
+            </select>
+          </label>
+          <label id="roomOtherLabel" hidden>
+            其他地點
+            <input id="roomOther" />
+          </label>
+          <label>
+            勞方
+            <input id="worker" required />
+          </label>
+          <label>
+            資方
+            <input id="employer" required />
+          </label>
+          <label>
+            調解人
+            <input id="mediator" required />
+          </label>
+          <label>
+            承辦人
+            <input id="owner" required />
+          </label>
+          <label>
+            紀錄
+            <input id="recorder" />
+          </label>
+          <label>
+            爭議類型
+            <select id="disputeType">
+              <option>工資</option>
+              <option>資遣費</option>
+              <option>職災</option>
+              <option>解僱</option>
+              <option>退休金</option>
+              <option>其他</option>
+            </select>
+          </label>
+          <label>
+            週報分類
+            <select id="reportCategory">
+              <option value="mediator">調解人</option>
+              <option value="committee">調解委員會</option>
+              <option value="arbitration">仲裁人(委員會)</option>
+              <option value="transfer">轉外縣市/中科/加工區</option>
+              <option value="laborAssocCity">台中市勞資關係協會</option>
+              <option value="laborAssocCounty">台中縣勞資關係協會</option>
+              <option value="laborEmploymentAssoc">台中市勞雇關係協會</option>
+              <option value="occupationalInjuryAssoc">職業災害法律權益服務協會</option>
+              <option value="bureau">本局召開</option>
+            </select>
+          </label>
+          <label>
+            勞方性別
+            <select id="workerGender">
+              <option value="">未填</option>
+              <option>男</option>
+              <option>女</option>
+            </select>
+          </label>
+          <label>
+            勞方年齡
+            <input id="workerAge" type="number" min="0" />
+          </label>
+          <label>
+            男性人數
+            <input id="maleCount" type="number" min="0" value="0" />
+          </label>
+          <label>
+            女性人數
+            <input id="femaleCount" type="number" min="0" value="0" />
+          </label>
+          <label>
+            特殊案件類型
+            <input id="specialCaseType" />
+          </label>
+          <label>
+            調解方式代碼
+            <input id="mediationMethodCode" />
+          </label>
+          <label>
+            狀態
+            <select id="caseStatus">
+              <option value="scheduled">已排定</option>
+              <option value="changed">改期</option>
+              <option value="withdrawn">撤回</option>
+              <option value="cancelled">取消</option>
+              <option value="finished">完成</option>
+            </select>
+          </label>
+          <label class="full">
+            備註
+            <textarea id="notes" rows="3"></textarea>
+          </label>
+        </div>
+
+        <div id="conflictWarning" class="warning" hidden></div>
+        <div class="dialog-actions">
+          <button id="deleteCase" class="danger-button" type="button">刪除</button>
+          <span></span>
+          <button class="secondary-button" id="cancelEdit" type="button">取消</button>
+          <button class="primary-button" type="submit">儲存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
