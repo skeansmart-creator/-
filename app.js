@@ -365,7 +365,7 @@ async function importIntakeExcel(e) {
   e.target.value = ""; // 清空，讓同一檔案可重複匯入
 }
 
-
+async function loadIntakeCases() {
   const [intake, batch] = await Promise.all([loadJson(intakeSource), loadJson(applicationBatchSource)]);
   applicationBatchCases = batch.map(normalizeBatchItem);
   intakeCases = mergeIntakeSources(intake, applicationBatchCases);
