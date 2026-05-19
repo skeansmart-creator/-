@@ -99,11 +99,24 @@
         </div>
 
         <input id="caseId" type="hidden" />
-        <div class="form-grid">
-          <label>
-            來源案件編號
-            <input id="sourceCaseNo" readonly />
+        <input id="sourceCaseNo" type="hidden" />
+        <input id="workerGender" type="hidden" />
+        <input id="workerAge" type="hidden" />
+        <input id="maleCount" type="hidden" value="0" />
+        <input id="femaleCount" type="hidden" value="0" />
+        <input id="mediationMethodCode" type="hidden" />
+
+        <div style="margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;">
+            <span>從 Excel 匯入排程資料</span>
+            <input id="importExcel" type="file" accept=".xlsx,.xls" style="display:none" />
+            <button type="button" class="secondary-button" style="min-height:32px;font-size:13px;"
+              onclick="document.getElementById('importExcel').click()">選擇 Excel 檔案</button>
+            <span id="importFileName" style="font-weight:400;color:var(--muted)"></span>
           </label>
+        </div>
+
+        <div class="form-grid">
           <label>
             案號
             <input id="caseNo" required />
@@ -155,11 +168,29 @@
             爭議類型
             <select id="disputeType">
               <option>工資</option>
+              <option>休息日工資</option>
+              <option>例假</option>
+              <option>特別休假</option>
+              <option>產假及產假工資</option>
+              <option>加班費</option>
               <option>資遣費</option>
-              <option>職災</option>
-              <option>解僱</option>
-              <option>退休金</option>
+              <option>舊制退休金</option>
+              <option>回復工作權</option>
+              <option>回復原職務</option>
+              <option>服務證書</option>
+              <option>非自願離職證明書</option>
               <option>其他</option>
+              <option>預告期間工資</option>
+              <option>勞退新制提繳(6%)</option>
+              <option>勞工保險給付爭議</option>
+              <option>契約</option>
+              <option>工會身分保護</option>
+              <option>職業災害補償-醫療費用</option>
+              <option>職業災害補償-原領工資</option>
+              <option>職業災害補償-失能補償</option>
+              <option>職業災害補償-死亡補償</option>
+              <option>職業災害補償-喪葬費</option>
+              <option>國定假日</option>
             </select>
           </label>
           <label>
@@ -178,31 +209,9 @@
             </select>
           </label>
           <label>
-            勞方性別
-            <select id="workerGender">
-              <option value="">未填</option>
-              <option>男</option>
-              <option>女</option>
-            </select>
-          </label>
-          <label>
-            勞方年齡
-            <input id="workerAge" type="number" min="0" />
-          </label>
-          <label>
-            男性人數
-            <input id="maleCount" type="number" min="0" value="0" />
-          </label>
-          <label>
-            女性人數
-            <input id="femaleCount" type="number" min="0" value="0" />
-          </label>
-          <label>
             特殊案件類型
             <input id="specialCaseType" />
           </label>
-
-          <input id="mediationMethodCode" type="hidden" />
           <label>
             狀態
             <select id="caseStatus">

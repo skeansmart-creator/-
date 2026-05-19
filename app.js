@@ -164,6 +164,7 @@ const elements = {
 };
 
 document.querySelector("#newCase").addEventListener("click", () => openCaseDialog());
+initImportExcel();
 document.querySelector("#reloadIntake").addEventListener("click", loadIntakeCases);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
@@ -429,6 +430,58 @@ function openCaseDialog(id, intakeItem) {
   toggleOtherRoom();
   updateConflictWarning();
   elements.dialog.showModal();
+}
+
+// ── Excel 匯入 ──
+function initImportExcel() {
+  const input = document.getElementById("importExcel");
+  if (!input) return;
+  input.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById("importFileName").textContent = file.name;
+    try {
+      const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+      // 從第5列開始（第4列為範例），欄位對應 Excel 格式
+      const dataRows = rows.slice(4).filter(r => r[3]); // D欄(index 3)=勞方姓名不為空
+      if (!dataRows.length) { alert("找不到資料，請確認從第5列開始填寫"); return; }
+
+      // 取第一筆填入表單
+      const r = dataRows[0];
+      const caseNo    = String(r[10] || "").trim(); // K欄=資方公司（案號未在Excel，用空）
+      const worker    = String(r[3]  || "").trim(); // D欄=勞方姓名
+      const employer  = String(r[10] || "").trim(); // K欄=資方公司名稱
+      const owner     = String(r[2]  || "").trim(); // C欄=承辦人
+      const mediMode  = String(r[18] || "").trim(); // S欄=調解方式代碼
+      const dispute   = String(r[32] || "").trim(); // AG欄=主要爭議類型
+      const special   = String(r[31] || "").trim(); // AF欄=特殊案件類型
+
+      if (worker) document.getElementById("worker").value = worker;
+      if (employer) document.getElementById("employer").value = employer;
+      if (owner) document.getElementById("owner").value = owner;
+      if (dispute) document.getElementById("disputeType").value = dispute;
+      if (special) document.getElementById("specialCaseType").value = special;
+
+      // 調解方式：取代碼部分（A/B/E/J/H/F/AH/BH/EH/JH）
+      if (mediMode) {
+        const code = mediMode.split(" - ")[0].trim();
+        const sel = document.getElementById("reportCategory");
+        if ([...sel.options].some(o => o.value === code)) sel.value = code;
+        document.getElementById("mediationMethodCode").value = mediMode;
+      }
+
+      if (dataRows.length > 1) {
+        alert(\`Excel 共有 \${dataRows.length} 筆資料，已填入第 1 筆。如需其他筆請手動修改。\`);
+      }
+    } catch (err) {
+      alert("Excel 讀取失敗：" + err.message);
+    }
+  });
 }
 
 function closeDialog() {
