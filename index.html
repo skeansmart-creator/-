@@ -210,22 +210,13 @@
               <option value="JH">JH - 指派調解人(臺中市職業災害法律服務協會)</option>
             </select>
           </label>
-          <label class="full" style="flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;">
-            <span style="color:var(--muted);font-size:13px;font-weight:700;min-width:100%;">特殊案件類型</span>
+          <label style="flex-direction:row;align-items:center;gap:16px;">
+            特殊案件
             <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="checkbox" id="special_disaster" value="職業災害" onchange="syncSpecialCaseType()"> 職業災害
+              <input type="radio" name="specialCase" id="special_yes" value="是" onchange="syncSpecialCaseType()"> 是
             </label>
             <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="checkbox" id="special_bully" value="職場霸凌" onchange="syncSpecialCaseType()"> 職場霸凌
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="checkbox" id="special_harass" value="性騷擾" onchange="syncSpecialCaseType()"> 性騷擾
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="checkbox" id="special_gender" value="性別歧視" onchange="syncSpecialCaseType()"> 性別歧視
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="checkbox" id="special_employ" value="就業歧視" onchange="syncSpecialCaseType()"> 就業歧視
+              <input type="radio" name="specialCase" id="special_no" value="否" checked onchange="syncSpecialCaseType()"> 否
             </label>
             <input id="specialCaseType" type="hidden" value="無" />
           </label>

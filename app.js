@@ -503,20 +503,16 @@ function initImportExcel() {
 }
 
 function syncSpecialCaseType() {
-  const checkboxes = ["special_disaster","special_bully","special_harass","special_gender","special_employ"];
-  const checked = checkboxes
-    .map(id => document.getElementById(id))
-    .filter(el => el && el.checked)
-    .map(el => el.value);
-  document.getElementById("specialCaseType").value = checked.length ? checked.join("、") : "無";
+  const yes = document.getElementById("special_yes");
+  document.getElementById("specialCaseType").value = (yes && yes.checked) ? "是" : "無";
 }
 
 function setSpecialCaseCheckboxes(value) {
-  const checkboxes = ["special_disaster","special_bully","special_harass","special_gender","special_employ"];
-  checkboxes.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.checked = value && value !== "無" && value.includes(el.value);
-  });
+  const isSpecial = value && value !== "無" && value !== "否" && value !== "";
+  const yes = document.getElementById("special_yes");
+  const no = document.getElementById("special_no");
+  if (yes) yes.checked = isSpecial;
+  if (no) no.checked = !isSpecial;
   syncSpecialCaseType();
 }
 
