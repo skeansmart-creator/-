@@ -259,61 +259,72 @@ async function importIntakeExcel(e) {
       const row = [];
       for (let C = range.s.c; C <= range.e.c; C++) {
         const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
-        row.push(cell ? cell.w || cell.v || "" : "");
+        row.push(cell ? (cell.w !== undefined ? cell.w : (cell.v !== undefined ? cell.v : "")) : "");
       }
       rows.push(row);
     }
 
-    // 格式偵測：第1欄是否為「錄案日期」
+    // 格式偵測：第1列第1欄是否含「錄案日期」
     const firstCell = String(rows.length > 0 ? rows[0][0] || "" : "").trim();
     const isSystemExport = firstCell.includes("錄案日期");
 
-    let dataRows;
-    if (isSystemExport) {
-      dataRows = rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim());
-    } else {
-      dataRows = rows.slice(4).filter(r => String(r[3] || "").trim());
-    }
+    // 有效資料列過濾
+    const dataRows = isSystemExport
+      ? rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim())
+      : rows.slice(4).filter(r => String(r[3] || "").trim());
 
     if (!dataRows.length) {
-      alert("找不到資料列。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式"));
+      alert("找不到資料列。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式") + "\n共 " + rows.length + " 列");
       e.target.value = "";
       return;
     }
 
     const imported = dataRows.map((r, idx) => {
-      let sourceCaseNo, customCaseNo, worker, employer, owner, mediMode, dispute, special, receivedDate, acceptanceMethod, workerGender, workerAge, reportCategory;
+      let sourceCaseNo, customCaseNo, worker, employer, owner, mediMode, dispute, special,
+          receivedDate, acceptanceMethod, workerGender, workerAge, maleCount, femaleCount, reportCategory;
 
       if (isSystemExport) {
-        // 系統匯出欄位
-        // A=0錄案日期 B=1案件類別 C=2自編案號 D=3承辦人
-        // K=10勞方 L=11資方 M=12特殊案件 N=13主要爭議
-        sourceCaseNo      = String(r[2]  || "").trim() || `import-${idx}`;
-        customCaseNo      = String(r[2]  || "").trim();
-        worker            = String(r[10] || "").trim();
-        employer          = String(r[11] || "").trim();
-        owner             = String(r[3]  || "").trim();
-        mediMode          = String(r[1]  || "").trim();
-        dispute           = String(r[13] || "").trim();
-        special           = String(r[12] || "").trim();
-        receivedDate      = String(r[0]  || "").trim();
-        acceptanceMethod  = String(r[1]  || "").trim();
-        workerGender      = String(r[7]  || "").trim(); // 依實際欄位調整
-        workerAge         = String(r[8]  || "").trim();
+        // 欄位對應（系統匯出格式，34欄）
+        // A=0  錄案日期        B=1  案件類別(F/B/H/E/J等代碼)
+        // C=2  自編案號        D=3  承辦人
+        // E=4  勞方地          F=5  工作地
+        // G=6  總人數          H=7  男性人數    I=8  女性人數    J=9  年齡
+        // K=10 勞方            L=11 資方
+        // M=12 特殊案件類型   N=13 主要爭議
+        // V=21 會議日期       AF=31 調解地點
+        sourceCaseNo     = String(r[2]  || "").trim() || `import-${idx}`;
+        customCaseNo     = String(r[2]  || "").trim();
+        worker           = String(r[10] || "").trim();
+        employer         = String(r[11] || "").trim();
+        owner            = String(r[3]  || "").trim();
+        mediMode         = String(r[1]  || "").trim();   // 案件類別代碼
+        dispute          = String(r[13] || "").trim();   // 主要爭議
+        special          = String(r[12] || "").trim();   // 特殊案件類型
+        receivedDate     = String(r[0]  || "").trim();   // 錄案日期（民國格式）
+        acceptanceMethod = String(r[31] || "").trim();   // 調解地點
+        // 男女人數是數字欄；性別從人數推算（無文字性別欄）
+        maleCount        = Number(r[7]) || 0;
+        femaleCount      = Number(r[8]) || 0;
+        workerGender     = maleCount > 0 ? "男" : (femaleCount > 0 ? "女" : "");
+        // 年齡：0 視為未填
+        workerAge        = (r[9] != null && String(r[9]).trim() !== "" && Number(r[9]) !== 0)
+                           ? String(r[9]) : "";
       } else {
         // 批次輸入表欄位
-        sourceCaseNo      = `batch-${String(r[1] || idx)}`;
-        customCaseNo      = String(r[1]  || "").trim();
-        worker            = String(r[3]  || "").trim();
-        employer          = String(r[10] || "").trim();
-        owner             = String(r[2]  || "").trim();
-        mediMode          = String(r[18] || "").trim();
-        dispute           = String(r[32] || "").trim();
-        special           = String(r[31] || "").trim();
-        receivedDate      = String(r[0]  || "").trim();
-        acceptanceMethod  = "";
-        workerGender      = "";
-        workerAge         = "";
+        sourceCaseNo     = `batch-${String(r[1] || idx)}`;
+        customCaseNo     = String(r[1]  || "").trim();
+        worker           = String(r[3]  || "").trim();
+        employer         = String(r[10] || "").trim();
+        owner            = String(r[2]  || "").trim();
+        mediMode         = String(r[18] || "").trim();
+        dispute          = String(r[32] || "").trim();
+        special          = String(r[31] || "").trim();
+        receivedDate     = String(r[0]  || "").trim();
+        acceptanceMethod = "";
+        maleCount        = 0;
+        femaleCount      = 0;
+        workerGender     = "";
+        workerAge        = "";
       }
 
       reportCategory = reportCategoryFromMethod(mediMode);
@@ -330,6 +341,8 @@ async function importIntakeExcel(e) {
         specialCaseType: special && special !== "無" ? special : "無",
         receivedDate,
         acceptanceMethod,
+        maleCount,
+        femaleCount,
         workerGender,
         workerAge,
         reportCategory,
@@ -337,7 +350,7 @@ async function importIntakeExcel(e) {
     }).filter(item => item.worker || item.employer);
 
     if (!imported.length) {
-      alert("匯入後沒有有效資料（勞方或資方欄位為空）。");
+      alert("匯入後沒有有效資料（勞方或資方欄位皆為空）。");
       e.target.value = "";
       return;
     }
@@ -349,10 +362,10 @@ async function importIntakeExcel(e) {
   } catch (err) {
     alert("Excel 讀取失敗：" + err.message);
   }
-  e.target.value = ""; // 清空 input，讓同一檔案可重複匯入
+  e.target.value = ""; // 清空，讓同一檔案可重複匯入
 }
 
-async function loadIntakeCases() {
+
   const [intake, batch] = await Promise.all([loadJson(intakeSource), loadJson(applicationBatchSource)]);
   applicationBatchCases = batch.map(normalizeBatchItem);
   intakeCases = mergeIntakeSources(intake, applicationBatchCases);

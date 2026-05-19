@@ -43,12 +43,10 @@
         <div class="panel-title">
           <div>
             <h2>待排案件</h2>
-            <p id="intakeSummary">尚未匯入收案資料</p>
+            <p id="intakeSummary">尚未匯入收案資料，請點「匯入收案 Excel」</p>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input id="intakeExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
-            <button id="importIntakeBtn" class="secondary-button" type="button">匯入收案 Excel</button>
-          </label>
+          <input id="intakeExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
+          <button id="importIntakeBtn" class="secondary-button" type="button">匯入收案 Excel</button>
         </div>
         <div id="intakeList" class="intake-list"></div>
       </section>
