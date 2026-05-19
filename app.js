@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519p");
+console.log("app.js version: 20260519q");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -473,6 +473,14 @@ function renderCalendar(weekDates, filtered) {
     return idx >= 0 ? idx : roomOrder.length;
   };
 
+  // 建立衝突 key set：同日期+時段+地點出現 2 筆以上視為衝突
+  const slotRoomCount = {};
+  filtered.forEach(item => {
+    const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
+    slotRoomCount[key] = (slotRoomCount[key] || 0) + 1;
+  });
+  const conflictKeys = new Set(Object.keys(slotRoomCount).filter(k => slotRoomCount[k] > 1));
+
   timeSlots.forEach((slot) => {
     elements.calendar.append(createCell(slot, "time-cell"));
     weekDates.forEach((date) => {
@@ -481,7 +489,10 @@ function renderCalendar(weekDates, filtered) {
       filtered
         .filter((item) => item.meetingDate === dateKey && item.meetingTime === slot)
         .sort((a, b) => roomRank(a) - roomRank(b) || a.caseNo.localeCompare(b.caseNo))
-        .forEach((item) => cell.append(createCaseCard(item)));
+        .forEach((item) => {
+          const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
+          cell.append(createCaseCard(item, conflictKeys.has(key)));
+        });
       elements.calendar.append(cell);
     });
   });
@@ -514,17 +525,18 @@ function renderCaseList(filtered) {
     });
 }
 
-function createCaseCard(item) {
+function createCaseCard(item, isConflict = false) {
   const button = document.createElement("button");
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
-  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}`;
+  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}`;
   button.type = "button";
   const specialTag = isSpecial ? `<small style="color:#7c3aed;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
+  const conflictTag = isConflict ? `<small style="color:#dc2626;font-weight:700;">⚠ 衝期</small>` : "";
   button.innerHTML = `
     <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
     <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(item.mediator)}</small>
-    ${specialTag}
+    ${specialTag}${conflictTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
