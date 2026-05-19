@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519m");
+console.log("app.js version: 20260519n");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -466,6 +466,13 @@ function renderCalendar(weekDates, filtered) {
     elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
   });
 
+  const roomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(二)", "晤談室(三)", "勞資爭議調解會議室"];
+  const roomRank = (item) => {
+    const r = displayRoom(item);
+    const idx = roomOrder.indexOf(r);
+    return idx >= 0 ? idx : roomOrder.length;
+  };
+
   timeSlots.forEach((slot) => {
     elements.calendar.append(createCell(slot, "time-cell"));
     weekDates.forEach((date) => {
@@ -473,7 +480,7 @@ function renderCalendar(weekDates, filtered) {
       const dateKey = toDateInputValue(date);
       filtered
         .filter((item) => item.meetingDate === dateKey && item.meetingTime === slot)
-        .sort((a, b) => a.caseNo.localeCompare(b.caseNo))
+        .sort((a, b) => roomRank(a) - roomRank(b) || a.caseNo.localeCompare(b.caseNo))
         .forEach((item) => cell.append(createCaseCard(item)));
       elements.calendar.append(cell);
     });
