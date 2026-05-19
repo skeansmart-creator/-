@@ -167,9 +167,22 @@
             資方
             <input id="employer" required />
           </label>
-          <label>
+          <label id="mediatorSingleLabel">
             調解人
-            <input id="mediator" required />
+            <input id="mediator" />
+          </label>
+          <!-- 調解委員會三欄（F類型時顯示） -->
+          <label id="mediatorChairLabel" hidden>
+            主席
+            <input id="mediatorChair" />
+          </label>
+          <label id="mediatorLaborLabel" hidden>
+            勞方委員
+            <input id="mediatorLabor" />
+          </label>
+          <label id="mediatorMgmtLabel" hidden>
+            資方委員
+            <input id="mediatorMgmt" />
           </label>
           <label>
             承辦人
@@ -210,7 +223,7 @@
           </label>
           <label>
             調解方式
-            <select id="reportCategory">
+            <select id="reportCategory" onchange="onReportCategoryChange()">
               <option value="A">A - 台中市勞資關係協會</option>
               <option value="B">B - 臺中市（縣）勞資關係協會</option>
               <option value="E">E - 台中市勞雇關係協會</option>
@@ -299,6 +312,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260519q"></script>
+    <script src="app.js?v=20260519r"></script>
   </body>
 </html>

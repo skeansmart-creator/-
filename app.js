@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519q");
+console.log("app.js version: 20260519r");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -518,7 +518,7 @@ function renderCaseList(filtered) {
       button.innerHTML = `
         <strong>${escapeHtml(item.caseNo)}｜${escapeHtml(statusLabels[item.status])}</strong>
         <span>${escapeHtml(item.meetingDate)} ${escapeHtml(item.meetingTime)}　${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</span>
-        <span>${escapeHtml(displayRoom(item))}　${escapeHtml(item.mediator)}　${escapeHtml(item.owner)}</span>
+        <span>${escapeHtml(displayRoom(item))}　${escapeHtml(getMediatorDisplay(item))}　${escapeHtml(item.owner)}</span>
       `;
       button.addEventListener("click", () => openCaseDialog(item.id));
       elements.caseList.append(button);
@@ -535,7 +535,7 @@ function createCaseCard(item, isConflict = false) {
   button.innerHTML = `
     <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
     <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
-    <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(item.mediator)}</small>
+    <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
     ${specialTag}${conflictTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
@@ -593,6 +593,18 @@ function openCaseDialog(id, intakeItem) {
   document.querySelector("#worker").value = item?.worker ?? intakeItem?.worker ?? "";
   document.querySelector("#employer").value = item?.employer ?? intakeItem?.employer ?? "";
   document.querySelector("#mediator").value = item?.mediator ?? "";
+  // 調解委員會三欄
+  if (item && isCommittee(item)) {
+    const obj = parseMediatorField(item.mediator);
+    document.getElementById("mediatorChair").value = obj.chair || "";
+    document.getElementById("mediatorLabor").value = obj.labor || "";
+    document.getElementById("mediatorMgmt").value = obj.mgmt || "";
+  } else {
+    document.getElementById("mediatorChair").value = "";
+    document.getElementById("mediatorLabor").value = "";
+    document.getElementById("mediatorMgmt").value = "";
+  }
+  onReportCategoryChange();
   document.querySelector("#recorder").value = item?.recorder ?? "";
   document.querySelector("#owner").value = item?.owner ?? "";
   document.querySelector("#owner").value = item?.owner ?? intakeItem?.owner ?? "";
@@ -788,7 +800,15 @@ async function saveCase(event) {
     roomOther: document.querySelector("#room").value === "其他" ? document.querySelector("#roomOther").value.trim() : "",
     worker: document.querySelector("#worker").value.trim(),
     employer: document.querySelector("#employer").value.trim(),
-    mediator: document.querySelector("#mediator").value.trim(),
+    mediator: (() => {
+      if (document.querySelector("#reportCategory").value === "F") {
+        const chair = document.getElementById("mediatorChair").value.trim();
+        const labor = document.getElementById("mediatorLabor").value.trim();
+        const mgmt  = document.getElementById("mediatorMgmt").value.trim();
+        return JSON.stringify({ chair, labor, mgmt });
+      }
+      return document.querySelector("#mediator").value.trim();
+    })(),
     recorder: document.querySelector("#recorder").value.trim(),
     owner: document.querySelector("#owner").value.trim(),
     disputeType: document.querySelector("#disputeType").value,
@@ -887,12 +907,11 @@ function exportCsv() {
       displayRoom(item),
       item.worker,
       item.employer,
-      item.mediator,
+      getMediatorDisplay(item),
       item.recorder,
       item.owner,
       item.disputeType,
       reportCategoryLabels[item.reportCategory] ?? item.reportCategory,
-      item.workerGender,
       item.workerAge,
       item.maleCount,
       item.femaleCount,
@@ -929,7 +948,7 @@ function exportWeeklyReport() {
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.employer,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
     item.owner,
-    item.mediator,
+    getMediatorDisplay(item),
     item.recorder,
     item.notes,
   ]);
@@ -1061,6 +1080,39 @@ function normalizeRoom(room) {
 
 function displayRoom(item) {
   return item.room === "其他" ? item.roomOther || "其他" : item.room;
+}
+
+function isCommittee(item) {
+  return (item?.reportCategory || "") === "F";
+}
+
+// 從 item 取得顯示用調解人字串
+function getMediatorDisplay(item) {
+  if (isCommittee(item)) {
+    try {
+      const obj = JSON.parse(item.mediator || "{}");
+      return [obj.chair, obj.labor, obj.mgmt].filter(Boolean).join("／");
+    } catch { return item.mediator || ""; }
+  }
+  return item.mediator || "";
+}
+
+// 切換調解委員會欄位
+function onReportCategoryChange() {
+  const isF = document.querySelector("#reportCategory").value === "F";
+  document.getElementById("mediatorSingleLabel").hidden = isF;
+  document.getElementById("mediatorChairLabel").hidden = !isF;
+  document.getElementById("mediatorLaborLabel").hidden = !isF;
+  document.getElementById("mediatorMgmtLabel").hidden = !isF;
+  document.getElementById("mediator").required = !isF;
+  document.getElementById("mediatorChair").required = isF;
+  document.getElementById("mediatorLabor").required = isF;
+  document.getElementById("mediatorMgmt").required = isF;
+}
+
+// 從 mediator 欄位字串解析三委員
+function parseMediatorField(val) {
+  try { return JSON.parse(val || "{}"); } catch { return {}; }
 }
 
 function toggleOtherRoom() {
