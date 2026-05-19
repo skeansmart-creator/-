@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519i");
+console.log("app.js version: 20260519k");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -254,22 +254,7 @@ async function importIntakeExcel(e) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellDates: false });
     const ws = wb.Sheets[wb.SheetNames[0]];
-
-    // xlsx.js 0.18.5 有 bug：某些 Excel 的 ws['!ref'] 只包含標題列（如 A1:AH1）
-    // 需要手動掃描實際最大列號來修正範圍
-    const refMatch = (ws['!ref'] || 'A1').match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-    if (refMatch) {
-      let maxRow = parseInt(refMatch[4]);
-      // 掃描 ws 中所有 key，找出實際最大列號
-      for (const key of Object.keys(ws)) {
-        if (key[0] === '!' || key[0] === undefined) continue;
-        const m = key.match(/\d+/);
-        if (m) { const rn = parseInt(m[0]); if (rn > maxRow) maxRow = rn; }
-      }
-      if (maxRow > parseInt(refMatch[4])) {
-        ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
-      }
-    }
+    fixSheetRef(ws);
 
     // header:1 取二維陣列
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
@@ -609,76 +594,77 @@ function initImportExcel() {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
+
+      // 修正 xlsx.js !ref 範圍 bug
+      fixSheetRef(ws);
+
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      if (rows.length < 2) { alert("找不到資料列。"); return; }
 
-      // 第1列為標題，從第2列開始讀資料（系統匯出格式）
-      // 偵測是哪種格式：看第1列第1欄是否為「錄案日期」
-      const firstCell = String(rows.length > 0 ? (rows[0][0] || "") : "").trim();
-      const isSystemExport = firstCell.includes("錄案日期");
+      // 建立標題對應
+      const headerMap = {};
+      rows[0].forEach((h, i) => { if (h) headerMap[String(h).trim()] = i; });
+      const get = (row, name) => (name in headerMap) ? String(row[headerMap[name]] ?? "").trim() : "";
+      const getNum = (row, name) => (name in headerMap) ? Number(row[headerMap[name]]) || 0 : 0;
+
+      const isSystemExport = "錄案日期" in headerMap;
       const dataRows = isSystemExport
-        ? rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim()) // 系統匯出：自編案號或勞方有值
-        : rows.slice(4).filter(r => String(r[3] || "").trim()); // 批次輸入表：勞方姓名有值
+        ? rows.slice(1).filter(r => get(r, "自編案號") || get(r, "勞方"))
+        : rows.slice(4).filter(r => String(r[3] || "").trim());
 
-      if (!dataRows.length) {
-        alert("找不到資料。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式") + "\n共" + rows.length + "列");
-        return;
-      }
+      if (!dataRows.length) { alert("找不到資料列。"); return; }
 
+      // 填入第1筆到表單
       const r = dataRows[0];
-
-      let caseNo, worker, employer, owner, mediMode, dispute, special, meetingDate;
-
       if (isSystemExport) {
-        // 系統匯出欄位對應
-        // A=0錄案日期 B=1案件類別 C=2自編案號 D=3承辦人
-        // K=10勞方 L=11資方 M=12特殊案件 N=13主要爭議
-        // V=21會議日期 AF=31調解地點
-        caseNo      = String(r[2]  || "").trim(); // C=自編案號
-        worker      = String(r[10] || "").trim(); // K=勞方
-        employer    = String(r[11] || "").trim(); // L=資方
-        owner       = String(r[3]  || "").trim(); // D=承辦人
-        mediMode    = String(r[1]  || "").trim(); // B=案件類別（代碼）
-        dispute     = String(r[13] || "").trim(); // N=主要爭議
-        special     = String(r[12] || "").trim(); // M=特殊案件類型
-        meetingDate = String(r[21] || "").trim(); // V=會議日期
+        const caseNo = get(r, "自編案號");
+        const worker = get(r, "勞方");
+        const employer = get(r, "資方");
+        const owner = get(r, "承辦人");
+        const mediMode = get(r, "案件類別");
+        const dispute = get(r, "主要爭議");
+        const special = get(r, "特殊案件類型");
+        const meetingDate = get(r, "會議日期");
+        const maleCount = getNum(r, "男性人數");
+        const femaleCount = getNum(r, "女性人數");
+
+        if (caseNo) document.getElementById("caseNo").value = caseNo;
+        if (worker) document.getElementById("worker").value = worker;
+        if (employer) document.getElementById("employer").value = employer;
+        if (owner) document.getElementById("owner").value = owner;
+        if (dispute) {
+          const sel = document.getElementById("disputeType");
+          if ([...sel.options].some(o => o.text === dispute || o.value === dispute)) sel.value = dispute;
+        }
+        setSpecialCaseCheckboxes(special && special !== "無" ? "是" : "無");
+        if (mediMode) {
+          const code = mediMode.split(" - ")[0].trim().toUpperCase();
+          const sel = document.getElementById("reportCategory");
+          if ([...sel.options].some(o => o.value === code)) sel.value = code;
+          document.getElementById("mediationMethodCode").value = mediMode;
+        }
+        if (meetingDate && meetingDate.includes("/")) {
+          const parts = meetingDate.split("/");
+          if (parts.length === 3) {
+            const year = parseInt(parts[0]) + 1911;
+            document.getElementById("meetingDate").value = year + "-" + parts[1].padStart(2,"0") + "-" + parts[2].padStart(2,"0");
+          }
+        }
+        // 性別 / 人數
+        document.getElementById("workerGender").value = maleCount > 0 ? "男" : (femaleCount > 0 ? "女" : "");
+        document.getElementById("maleCount").value = maleCount;
+        document.getElementById("femaleCount").value = femaleCount;
       } else {
-        // 批次輸入表欄位對應
-        caseNo      = "";
-        worker      = String(r[3]  || "").trim();
-        employer    = String(r[10] || "").trim();
-        owner       = String(r[2]  || "").trim();
-        mediMode    = String(r[18] || "").trim();
-        dispute     = String(r[32] || "").trim();
-        special     = String(r[31] || "").trim();
-        meetingDate = "";
-      }
-
-      if (caseNo) document.getElementById("caseNo").value = caseNo;
-      if (worker) document.getElementById("worker").value = worker;
-      if (employer) document.getElementById("employer").value = employer;
-      if (owner) document.getElementById("owner").value = owner;
-      if (dispute) {
-        const sel = document.getElementById("disputeType");
-        if ([...sel.options].some(o => o.text === dispute || o.value === dispute)) sel.value = dispute;
-      }
-      // 特殊案件：有值且不為「無」就勾「是」
-      setSpecialCaseCheckboxes(special && special !== "無" ? "是" : "無");
-
-      // 調解方式代碼
-      if (mediMode) {
-        const code = mediMode.split(" - ")[0].trim().toUpperCase();
-        const sel = document.getElementById("reportCategory");
-        if ([...sel.options].some(o => o.value === code)) sel.value = code;
-        document.getElementById("mediationMethodCode").value = mediMode;
-      }
-
-      // 會議日期（系統匯出格式 115/05/18 → 2026-05-18）
-      if (meetingDate && meetingDate.includes("/")) {
-        const parts = meetingDate.split("/");
-        if (parts.length === 3) {
-          const year = parseInt(parts[0]) + 1911;
-          const dateVal = year + "-" + parts[1].padStart(2,"0") + "-" + parts[2].padStart(2,"0");
-          document.getElementById("meetingDate").value = dateVal;
+        // 批次輸入表
+        if (r[3]) document.getElementById("worker").value = String(r[3]).trim();
+        if (r[10]) document.getElementById("employer").value = String(r[10]).trim();
+        if (r[2]) document.getElementById("owner").value = String(r[2]).trim();
+        const mediMode = String(r[18] || "").trim();
+        if (mediMode) {
+          const code = mediMode.split(" - ")[0].trim().toUpperCase();
+          const sel = document.getElementById("reportCategory");
+          if ([...sel.options].some(o => o.value === code)) sel.value = code;
+          document.getElementById("mediationMethodCode").value = mediMode;
         }
       }
 
@@ -1151,4 +1137,20 @@ function buildIntakeNotes(item) {
   if (item.mediationLocation) parts.push(`原填地點：${item.mediationLocation}`);
   if (item.specialCaseType && item.specialCaseType !== "無") parts.push(`特殊案件：${item.specialCaseType}`);
   return parts.join("；");
+}
+
+// xlsx.js 0.18.5 bug 修正：某些 Excel 的 ws['!ref'] 只包含標題列
+// 掃描 ws 所有 cell key，找出實際最大列號並修正範圍
+function fixSheetRef(ws) {
+  const refMatch = (ws['!ref'] || 'A1').match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+  if (!refMatch) return;
+  let maxRow = parseInt(refMatch[4]);
+  for (const key of Object.keys(ws)) {
+    if (key[0] === '!' || key[0] === undefined) continue;
+    const m = key.match(/\d+/);
+    if (m) { const rn = parseInt(m[0]); if (rn > maxRow) maxRow = rn; }
+  }
+  if (maxRow > parseInt(refMatch[4])) {
+    ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
+  }
 }
