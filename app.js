@@ -480,36 +480,75 @@ function initImportExcel() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-      // 從第5列開始（第4列為範例），欄位對應 Excel 格式
-      const dataRows = rows.slice(4).filter(r => r[3]); // D欄(index 3)=勞方姓名不為空
-      if (!dataRows.length) { alert("找不到資料，請確認從第5列開始填寫"); return; }
+      // 第1列為標題，從第2列開始讀資料（系統匯出格式）
+      // 偵測是哪種格式：看第1列第1欄是否為「錄案日期」
+      const isSystemExport = rows.length > 0 && String(rows[0][0] || "").includes("錄案日期");
+      const dataRows = isSystemExport
+        ? rows.slice(1).filter(r => r[10]) // 系統匯出：從第2列，K欄(index10)=勞方不為空
+        : rows.slice(4).filter(r => r[3]);  // 批次輸入表：從第5列，D欄(index3)=勞方不為空
 
-      // 取第一筆填入表單
+      if (!dataRows.length) { alert("找不到資料"); return; }
+
       const r = dataRows[0];
-      const caseNo    = String(r[10] || "").trim(); // K欄=資方公司（案號未在Excel，用空）
-      const worker    = String(r[3]  || "").trim(); // D欄=勞方姓名
-      const employer  = String(r[10] || "").trim(); // K欄=資方公司名稱
-      const owner     = String(r[2]  || "").trim(); // C欄=承辦人
-      const mediMode  = String(r[18] || "").trim(); // S欄=調解方式代碼
-      const dispute   = String(r[32] || "").trim(); // AG欄=主要爭議類型
-      const special   = String(r[31] || "").trim(); // AF欄=特殊案件類型
 
+      let caseNo, worker, employer, owner, mediMode, dispute, special, meetingDate;
+
+      if (isSystemExport) {
+        // 系統匯出欄位對應
+        // A=0錄案日期 B=1案件類別 C=2自編案號 D=3承辦人
+        // K=10勞方 L=11資方 M=12特殊案件 N=13主要爭議
+        // V=21會議日期 AF=31調解地點
+        caseNo      = String(r[2]  || "").trim(); // C=自編案號
+        worker      = String(r[10] || "").trim(); // K=勞方
+        employer    = String(r[11] || "").trim(); // L=資方
+        owner       = String(r[3]  || "").trim(); // D=承辦人
+        mediMode    = String(r[1]  || "").trim(); // B=案件類別（代碼）
+        dispute     = String(r[13] || "").trim(); // N=主要爭議
+        special     = String(r[12] || "").trim(); // M=特殊案件類型
+        meetingDate = String(r[21] || "").trim(); // V=會議日期
+      } else {
+        // 批次輸入表欄位對應
+        caseNo      = "";
+        worker      = String(r[3]  || "").trim();
+        employer    = String(r[10] || "").trim();
+        owner       = String(r[2]  || "").trim();
+        mediMode    = String(r[18] || "").trim();
+        dispute     = String(r[32] || "").trim();
+        special     = String(r[31] || "").trim();
+        meetingDate = "";
+      }
+
+      if (caseNo) document.getElementById("caseNo").value = caseNo;
       if (worker) document.getElementById("worker").value = worker;
       if (employer) document.getElementById("employer").value = employer;
       if (owner) document.getElementById("owner").value = owner;
-      if (dispute) document.getElementById("disputeType").value = dispute;
-      if (special) document.getElementById("specialCaseType").value = special;
+      if (dispute) {
+        const sel = document.getElementById("disputeType");
+        if ([...sel.options].some(o => o.text === dispute || o.value === dispute)) sel.value = dispute;
+      }
+      // 特殊案件：有值且不為「無」就勾「是」
+      setSpecialCaseCheckboxes(special && special !== "無" ? "是" : "無");
 
-      // 調解方式：取代碼部分（A/B/E/J/H/F/AH/BH/EH/JH）
+      // 調解方式代碼
       if (mediMode) {
-        const code = mediMode.split(" - ")[0].trim();
+        const code = mediMode.split(" - ")[0].trim().toUpperCase();
         const sel = document.getElementById("reportCategory");
         if ([...sel.options].some(o => o.value === code)) sel.value = code;
         document.getElementById("mediationMethodCode").value = mediMode;
       }
 
+      // 會議日期（系統匯出格式 115/05/18 → 2026-05-18）
+      if (meetingDate && meetingDate.includes("/")) {
+        const parts = meetingDate.split("/");
+        if (parts.length === 3) {
+          const year = parseInt(parts[0]) + 1911;
+          const dateVal = year + "-" + parts[1].padStart(2,"0") + "-" + parts[2].padStart(2,"0");
+          document.getElementById("meetingDate").value = dateVal;
+        }
+      }
+
       if (dataRows.length > 1) {
-        alert("Excel 共有 " + dataRows.length + " 筆資料，已填入第 1 筆。如需其他筆請手動修改。");
+        alert("共有 " + dataRows.length + " 筆資料，已填入第 1 筆。");
       }
     } catch (err) {
       alert("Excel 讀取失敗：" + err.message);
