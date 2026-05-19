@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519o");
+console.log("app.js version: 20260519p");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -606,6 +606,7 @@ function openCaseDialog(id, intakeItem) {
   document.getElementById("meetingTime2").value = "";
   document.getElementById("room2").value = "晤談室(一)";
   document.getElementById("roomOther2").value = "";
+  document.getElementById("mediator2").value = "";
   document.getElementById("roomOther2Label").hidden = true;
   document.getElementById("conflictWarning2").hidden = true;
 
@@ -806,6 +807,7 @@ async function saveCase(event) {
     if (date2 && time2) {
       const room2val = document.getElementById("room2").value;
       const roomOther2 = document.getElementById("roomOther2").value.trim();
+      const mediator2 = document.getElementById("mediator2").value.trim();
       const next2 = {
         ...next,
         id: crypto.randomUUID(),
@@ -813,6 +815,7 @@ async function saveCase(event) {
         meetingTime: time2,
         room: room2val,
         roomOther: room2val === "其他" ? roomOther2 : "",
+        mediator: mediator2 || next.mediator,
         status: "scheduled",
         notes: (next.notes ? next.notes + "　" : "") + (status === "changed" ? "【改期】" : "【再次開會】"),
       };
