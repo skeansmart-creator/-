@@ -476,7 +476,7 @@ function initImportExcel() {
       }
 
       if (dataRows.length > 1) {
-        alert(\`Excel 共有 \${dataRows.length} 筆資料，已填入第 1 筆。如需其他筆請手動修改。\`);
+        alert("Excel 共有 " + dataRows.length + " 筆資料，已填入第 1 筆。如需其他筆請手動修改。");
       }
     } catch (err) {
       alert("Excel 讀取失敗：" + err.message);
