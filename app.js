@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519g");
+console.log("app.js version: 20260519i");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -255,7 +255,23 @@ async function importIntakeExcel(e) {
     const wb = XLSX.read(buf, { type: "array", cellDates: false });
     const ws = wb.Sheets[wb.SheetNames[0]];
 
-    // header:1 取二維陣列，再自建 headerMap，避開 xlsx.js 對高度異常標題列的 bug
+    // xlsx.js 0.18.5 有 bug：某些 Excel 的 ws['!ref'] 只包含標題列（如 A1:AH1）
+    // 需要手動掃描實際最大列號來修正範圍
+    const refMatch = (ws['!ref'] || 'A1').match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (refMatch) {
+      let maxRow = parseInt(refMatch[4]);
+      // 掃描 ws 中所有 key，找出實際最大列號
+      for (const key of Object.keys(ws)) {
+        if (key[0] === '!' || key[0] === undefined) continue;
+        const m = key.match(/\d+/);
+        if (m) { const rn = parseInt(m[0]); if (rn > maxRow) maxRow = rn; }
+      }
+      if (maxRow > parseInt(refMatch[4])) {
+        ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
+      }
+    }
+
+    // header:1 取二維陣列
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
     if (!rows.length) {
@@ -305,19 +321,6 @@ async function importIntakeExcel(e) {
       }).filter(item => item.worker || item.employer);
     } else {
       // 系統匯出格式（用欄位名稱）
-      // DEBUG: 查看 rows 結構
-      const row1 = rows[1] || [];
-      const colCaseNo = col("自編案號");
-      const colWorker = col("勞方");
-      alert("DEBUG rows 資訊：\nrows.length=" + rows.length
-        + "\nrows[0].length=" + (rows[0]||[]).length
-        + "\nrows[1].length=" + row1.length
-        + "\ncol(自編案號)=" + colCaseNo
-        + "\ncol(勞方)=" + colWorker
-        + "\nrows[1][" + colCaseNo + "]=" + JSON.stringify(row1[colCaseNo])
-        + "\nrows[1][" + colWorker + "]=" + JSON.stringify(row1[colWorker])
-        + "\nrows[1] 前5格=" + JSON.stringify(row1.slice(0,5))
-      );
       const dataRows = rows.slice(1).filter(r =>
         String(r[col("自編案號")] || "").trim() || String(r[col("勞方")] || "").trim()
       );
