@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519l");
+console.log("app.js version: 20260519m");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -500,7 +500,7 @@ function renderCaseList(filtered) {
       button.innerHTML = `
         <strong>${escapeHtml(item.caseNo)}｜${escapeHtml(statusLabels[item.status])}</strong>
         <span>${escapeHtml(item.meetingDate)} ${escapeHtml(item.meetingTime)}　${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</span>
-        <span>${escapeHtml(item.room)}　${escapeHtml(item.mediator)}　${escapeHtml(item.owner)}</span>
+        <span>${escapeHtml(displayRoom(item))}　${escapeHtml(item.mediator)}　${escapeHtml(item.owner)}</span>
       `;
       button.addEventListener("click", () => openCaseDialog(item.id));
       elements.caseList.append(button);
@@ -516,7 +516,7 @@ function createCaseCard(item) {
   button.innerHTML = `
     <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
     <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
-    <small>${escapeHtml(item.room)}｜${escapeHtml(item.mediator)}</small>
+    <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(item.mediator)}</small>
     ${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
