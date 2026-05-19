@@ -13,6 +13,14 @@
       .case-card.conflict strong {
         color: #dc2626;
       }
+      .case-card.reserved {
+        border: 2px dashed #3b82f6 !important;
+        background: #eff6ff !important;
+        opacity: 0.85;
+      }
+      .case-card.reserved strong {
+        color: #1d4ed8;
+      }
     </style>
   </head>
   <body>
@@ -39,6 +47,7 @@
           狀態
           <select id="statusFilter">
             <option value="all">全部</option>
+            <option value="reserved">預約</option>
             <option value="scheduled">已排定</option>
             <option value="changed">改期</option>
             <option value="withdrawn">撤回</option>
@@ -161,11 +170,11 @@
           </label>
           <label>
             勞方
-            <input id="worker" required />
+            <input id="worker" />
           </label>
           <label>
             資方
-            <input id="employer" required />
+            <input id="employer" />
           </label>
           <label id="mediatorSingleLabel">
             調解人
@@ -251,6 +260,7 @@
           <label>
             狀態
             <select id="caseStatus" onchange="onStatusChange()">
+              <option value="reserved">預約</option>
               <option value="scheduled">已排定</option>
               <option value="changed">改期</option>
               <option value="reschedule">再次開會</option>
@@ -312,6 +322,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260519r"></script>
+    <script src="app.js?v=20260519s"></script>
   </body>
 </html>

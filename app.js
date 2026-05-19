@@ -1,7 +1,9 @@
-console.log("app.js version: 20260519r");
+console.log("app.js version: 20260519s");
 const statusLabels = {
+  reserved: "預約",
   scheduled: "已排定",
   changed: "改期",
+  reschedule: "再次開會",
   withdrawn: "撤回",
   cancelled: "取消",
   finished: "完成",
@@ -528,13 +530,20 @@ function renderCaseList(filtered) {
 function createCaseCard(item, isConflict = false) {
   const button = document.createElement("button");
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
+  const isReserved = item.status === "reserved";
   button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}`;
   button.type = "button";
   const specialTag = isSpecial ? `<small style="color:#7c3aed;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
   const conflictTag = isConflict ? `<small style="color:#dc2626;font-weight:700;">⚠ 衝期</small>` : "";
+  const mainLine = isReserved
+    ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
+    : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
+  const workerLine = isReserved
+    ? `<small style="color:#6b7280;">待補：案號、勞資雙方</small>`
+    : `<small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>`;
   button.innerHTML = `
-    <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
-    <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
+    ${mainLine}
+    ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
     ${specialTag}${conflictTag}
   `;
@@ -623,6 +632,7 @@ function openCaseDialog(id, intakeItem) {
   const meetingDateVal = item?.meetingDate ?? toDateInputValue(selectedWeekStart);
   const autoStatus = item ? item.status : (meetingDateVal < today ? "finished" : "scheduled");
   document.querySelector("#caseStatus").value = autoStatus;
+  onStatusChange();
   // 重設子表單
   const panel = document.getElementById("secondMeetingPanel");
   panel.hidden = true;
@@ -751,6 +761,7 @@ function setSpecialCaseCheckboxes(value) {
 
 function onStatusChange() {
   const status = document.querySelector("#caseStatus").value;
+  const isReserved = status === "reserved";
   const panel = document.getElementById("secondMeetingPanel");
   const title = document.getElementById("secondMeetingTitle");
   const show = status === "changed" || status === "reschedule";
@@ -758,6 +769,21 @@ function onStatusChange() {
   if (show) {
     title.textContent = status === "changed" ? "改期後的新時間" : "再次開會時間";
   }
+
+  // 預約模式：勞資雙方、承辦人、調解人不必填
+  document.getElementById("worker").required   = !isReserved;
+  document.getElementById("employer").required = !isReserved;
+  document.getElementById("owner").required    = !isReserved;
+  // 調解人欄位必填跟著調解方式走，預約時全部不必填
+  if (isReserved) {
+    document.getElementById("mediator").required     = false;
+    document.getElementById("mediatorChair").required = false;
+    document.getElementById("mediatorLabor").required = false;
+    document.getElementById("mediatorMgmt").required  = false;
+  } else {
+    onReportCategoryChange(); // 還原調解方式控制的必填
+  }
+
   updateConflictWarning2();
 }
 
