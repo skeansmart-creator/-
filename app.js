@@ -251,98 +251,84 @@ async function importIntakeExcel(e) {
   try {
     const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array", cellDates: false });
+    const wb = XLSX.read(buf, { type: "array", cellDates: false, sheetStubs: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    // sheet_to_json 最可靠：正確處理 shared strings、空欄位、各種格式
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-    // 格式偵測：第1列第1欄是否含「錄案日期」
-    const firstCell = String(rows.length > 0 ? rows[0][0] || "" : "").trim();
-    const isSystemExport = firstCell.includes("錄案日期");
+    // 用標題列名稱對應欄位，不依賴固定索引
+    // objArr：每列是一個 {欄位名: 值} 的物件
+    const objArr = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-    // 有效資料列過濾
-    const dataRows = isSystemExport
-      ? rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim())
-      : rows.slice(4).filter(r => String(r[3] || "").trim());
-
-    if (!dataRows.length) {
-      alert("找不到資料列。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式") + "\n共 " + rows.length + " 列");
+    if (!objArr.length) {
+      alert("找不到資料。\n請確認 Excel 第一列為欄位標題。\n試讀到 " + Object.keys(ws).filter(k => !k.startsWith("!")).length + " 個儲存格");
       e.target.value = "";
       return;
     }
 
-    const imported = dataRows.map((r, idx) => {
-      let sourceCaseNo, customCaseNo, worker, employer, owner, mediMode, dispute, special,
-          receivedDate, acceptanceMethod, workerGender, workerAge, maleCount, femaleCount, reportCategory;
+    // 格式偵測：第一列物件的 key 包含「錄案日期」→ 系統匯出格式
+    const keys = Object.keys(objArr[0]);
+    const isSystemExport = keys.some(k => k.includes("錄案日期"));
 
-      if (isSystemExport) {
-        // 欄位對應（系統匯出格式，34欄）
-        // A=0  錄案日期        B=1  案件類別(F/B/H/E/J等代碼)
-        // C=2  自編案號        D=3  承辦人
-        // E=4  勞方地          F=5  工作地
-        // G=6  總人數          H=7  男性人數    I=8  女性人數    J=9  年齡
-        // K=10 勞方            L=11 資方
-        // M=12 特殊案件類型   N=13 主要爭議
-        // V=21 會議日期       AF=31 調解地點
-        sourceCaseNo     = String(r[2]  || "").trim() || `import-${idx}`;
-        customCaseNo     = String(r[2]  || "").trim();
-        worker           = String(r[10] || "").trim();
-        employer         = String(r[11] || "").trim();
-        owner            = String(r[3]  || "").trim();
-        mediMode         = String(r[1]  || "").trim();   // 案件類別代碼
-        dispute          = String(r[13] || "").trim();   // 主要爭議
-        special          = String(r[12] || "").trim();   // 特殊案件類型
-        receivedDate     = String(r[0]  || "").trim();   // 錄案日期（民國格式）
-        acceptanceMethod = String(r[31] || "").trim();   // 調解地點
-        // 男女人數是數字欄；性別從人數推算（無文字性別欄）
-        maleCount        = Number(r[7]) || 0;
-        femaleCount      = Number(r[8]) || 0;
-        workerGender     = maleCount > 0 ? "男" : (femaleCount > 0 ? "女" : "");
-        // 年齡：0 視為未填
-        workerAge        = (r[9] != null && String(r[9]).trim() !== "" && Number(r[9]) !== 0)
-                           ? String(r[9]) : "";
-      } else {
-        // 批次輸入表欄位
-        sourceCaseNo     = `batch-${String(r[1] || idx)}`;
-        customCaseNo     = String(r[1]  || "").trim();
-        worker           = String(r[3]  || "").trim();
-        employer         = String(r[10] || "").trim();
-        owner            = String(r[2]  || "").trim();
-        mediMode         = String(r[18] || "").trim();
-        dispute          = String(r[32] || "").trim();
-        special          = String(r[31] || "").trim();
-        receivedDate     = String(r[0]  || "").trim();
-        acceptanceMethod = "";
-        maleCount        = 0;
-        femaleCount      = 0;
-        workerGender     = "";
-        workerAge        = "";
-      }
-
-      reportCategory = reportCategoryFromMethod(mediMode);
-
-      return {
-        sourceCaseNo,
-        customCaseNo,
-        worker,
-        employer,
-        owner,
-        mediationMethodCode: mediMode,
-        disputeType: guessDisputeType(dispute),
-        claim: dispute,
-        specialCaseType: special && special !== "無" ? special : "無",
-        receivedDate,
-        acceptanceMethod,
-        maleCount,
-        femaleCount,
-        workerGender,
-        workerAge,
-        reportCategory,
-      };
-    }).filter(item => item.worker || item.employer);
+    let imported;
+    if (isSystemExport) {
+      imported = objArr
+        .filter(row => String(row["自編案號"] || "").trim() || String(row["勞方"] || "").trim())
+        .map((row, idx) => {
+          const maleCount  = Number(row["男性人數"]) || 0;
+          const femaleCount = Number(row["女性人數"]) || 0;
+          const mediMode   = String(row["案件類別"] || "").trim();
+          const dispute    = String(row["主要爭議"] || "").trim();
+          const special    = String(row["特殊案件類型"] || "").trim();
+          const age        = Number(row["年齡"]) || 0;
+          return {
+            sourceCaseNo:     String(row["自編案號"] || "").trim() || `import-${idx}`,
+            customCaseNo:     String(row["自編案號"] || "").trim(),
+            worker:           String(row["勞方"] || "").trim(),
+            employer:         String(row["資方"] || "").trim(),
+            owner:            String(row["承辦人"] || "").trim(),
+            mediationMethodCode: mediMode,
+            disputeType:      guessDisputeType(dispute),
+            claim:            dispute,
+            specialCaseType:  special && special !== "無" ? special : "無",
+            receivedDate:     String(row["錄案日期"] || "").trim(),
+            acceptanceMethod: String(row["調解地點"] || "").trim(),
+            maleCount,
+            femaleCount,
+            workerGender:     maleCount > 0 ? "男" : (femaleCount > 0 ? "女" : ""),
+            workerAge:        age > 0 ? String(age) : "",
+            reportCategory:   reportCategoryFromMethod(mediMode),
+          };
+        })
+        .filter(item => item.worker || item.employer);
+    } else {
+      // 批次輸入表：用索引（因為沒有固定標題）
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const dataRows = rows.slice(4).filter(r => String(r[3] || "").trim());
+      imported = dataRows.map((r, idx) => {
+        const mediMode = String(r[18] || "").trim();
+        const dispute  = String(r[32] || "").trim();
+        return {
+          sourceCaseNo:     `batch-${String(r[1] || idx)}`,
+          customCaseNo:     String(r[1]  || "").trim(),
+          worker:           String(r[3]  || "").trim(),
+          employer:         String(r[10] || "").trim(),
+          owner:            String(r[2]  || "").trim(),
+          mediationMethodCode: mediMode,
+          disputeType:      guessDisputeType(dispute),
+          claim:            dispute,
+          specialCaseType:  "無",
+          receivedDate:     String(r[0]  || "").trim(),
+          acceptanceMethod: "",
+          maleCount:        0,
+          femaleCount:      0,
+          workerGender:     "",
+          workerAge:        "",
+          reportCategory:   reportCategoryFromMethod(mediMode),
+        };
+      }).filter(item => item.worker || item.employer);
+    }
 
     if (!imported.length) {
-      alert("匯入後沒有有效資料（勞方或資方欄位皆為空）。");
+      alert("匯入後沒有有效資料（勞方或資方欄位皆為空）。\n偵測格式：" + (isSystemExport ? "系統匯出" : "批次輸入表") + "\n標題欄位：" + keys.slice(0,5).join("、"));
       e.target.value = "";
       return;
     }
@@ -352,9 +338,9 @@ async function importIntakeExcel(e) {
     renderIntakeList();
     alert(`匯入完成，共 ${imported.length} 筆待排案件。`);
   } catch (err) {
-    alert("Excel 讀取失敗：" + err.message);
+    alert("Excel 讀取失敗：" + err.message + "\n" + err.stack);
   }
-  e.target.value = ""; // 清空，讓同一檔案可重複匯入
+  e.target.value = "";
 }
 
 async function loadIntakeCases() {
