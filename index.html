@@ -214,14 +214,16 @@
               <option value="JH">JH - 指派調解人(臺中市職業災害法律服務協會)</option>
             </select>
           </label>
-          <label style="flex-direction:row;align-items:center;gap:16px;">
+          <label style="flex-direction:row!important;align-items:center;gap:16px;">
             特殊案件
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="radio" name="specialCase" id="special_yes" value="是" onchange="syncSpecialCaseType()"> 是
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
-              <input type="radio" name="specialCase" id="special_no" value="否" checked onchange="syncSpecialCaseType()"> 否
-            </label>
+            <span style="display:inline-flex;align-items:center;gap:14px;font-weight:400;">
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);margin:0;">
+                <input type="radio" name="specialCase" id="special_yes" value="是" onchange="syncSpecialCaseType()"> 是
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);margin:0;">
+                <input type="radio" name="specialCase" id="special_no" value="否" checked onchange="syncSpecialCaseType()"> 否
+              </label>
+            </span>
             <input id="specialCaseType" type="hidden" value="無" />
           </label>
           <label>
@@ -252,6 +254,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260519i"></script>
+    <script src="app.js?v=20260519k"></script>
   </body>
 </html>
