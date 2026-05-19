@@ -253,16 +253,8 @@ async function importIntakeExcel(e) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellDates: false });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-    const rows = [];
-    for (let R = range.s.r; R <= range.e.r; R++) {
-      const row = [];
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
-        row.push(cell ? (cell.w !== undefined ? cell.w : (cell.v !== undefined ? cell.v : "")) : "");
-      }
-      rows.push(row);
-    }
+    // sheet_to_json 最可靠：正確處理 shared strings、空欄位、各種格式
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
     // 格式偵測：第1列第1欄是否含「錄案日期」
     const firstCell = String(rows.length > 0 ? rows[0][0] || "" : "").trim();
@@ -602,17 +594,7 @@ function initImportExcel() {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // 取得實際資料範圍（忽略篩選器）
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      const rows = [];
-      for (let R = range.s.r; R <= range.e.r; R++) {
-        const row = [];
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const cell = ws[XLSX.utils.encode_cell({r: R, c: C})];
-          row.push(cell ? (cell.w || cell.v || "") : "");
-        }
-        rows.push(row);
-      }
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
       // 第1列為標題，從第2列開始讀資料（系統匯出格式）
       // 偵測是哪種格式：看第1列第1欄是否為「錄案日期」
