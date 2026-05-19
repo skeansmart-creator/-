@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519k");
+console.log("app.js version: 20260519l");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -210,18 +210,29 @@ function initialize() {
 
 async function loadRemoteCases() {
   if (!supabaseClient) return;
-  const { data, error } = await supabaseClient
-    .from("mediation_schedules")
-    .select("*")
-    .order("meeting_date", { ascending: true })
-    .order("meeting_time", { ascending: true });
+  const pageSize = 1000;
+  let allData = [];
+  let from = 0;
 
-  if (error) {
-    console.warn("Supabase load failed; using local data", error);
-    return;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from("mediation_schedules")
+      .select("*")
+      .order("meeting_date", { ascending: true })
+      .order("meeting_time", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      console.warn("Supabase load failed; using local data", error);
+      return;
+    }
+
+    allData = allData.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
 
-  cases = data.map(fromDbCase);
+  cases = allData.map(fromDbCase);
   persist();
   render();
 }
