@@ -166,7 +166,8 @@ const elements = {
 
 document.querySelector("#newCase").addEventListener("click", () => openCaseDialog());
 initImportExcel();
-document.querySelector("#reloadIntake").addEventListener("click", loadIntakeCases);
+document.querySelector("#importIntakeBtn").addEventListener("click", () => document.querySelector("#intakeExcelInput").click());
+document.querySelector("#intakeExcelInput").addEventListener("change", importIntakeExcel);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
@@ -202,7 +203,7 @@ initialize();
 function initialize() {
   elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
   loadRemoteCases();
-  loadIntakeCases();
+  renderIntakeList();
   render();
 }
 
@@ -242,6 +243,113 @@ function loadCases() {
   } catch {
     return sampleCases;
   }
+}
+
+async function importIntakeExcel(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    const rows = [];
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const row = [];
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        row.push(cell ? cell.w || cell.v || "" : "");
+      }
+      rows.push(row);
+    }
+
+    // 格式偵測：第1欄是否為「錄案日期」
+    const firstCell = String(rows.length > 0 ? rows[0][0] || "" : "").trim();
+    const isSystemExport = firstCell.includes("錄案日期");
+
+    let dataRows;
+    if (isSystemExport) {
+      dataRows = rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim());
+    } else {
+      dataRows = rows.slice(4).filter(r => String(r[3] || "").trim());
+    }
+
+    if (!dataRows.length) {
+      alert("找不到資料列。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式"));
+      e.target.value = "";
+      return;
+    }
+
+    const imported = dataRows.map((r, idx) => {
+      let sourceCaseNo, customCaseNo, worker, employer, owner, mediMode, dispute, special, receivedDate, acceptanceMethod, workerGender, workerAge, reportCategory;
+
+      if (isSystemExport) {
+        // 系統匯出欄位
+        // A=0錄案日期 B=1案件類別 C=2自編案號 D=3承辦人
+        // K=10勞方 L=11資方 M=12特殊案件 N=13主要爭議
+        sourceCaseNo      = String(r[2]  || "").trim() || `import-${idx}`;
+        customCaseNo      = String(r[2]  || "").trim();
+        worker            = String(r[10] || "").trim();
+        employer          = String(r[11] || "").trim();
+        owner             = String(r[3]  || "").trim();
+        mediMode          = String(r[1]  || "").trim();
+        dispute           = String(r[13] || "").trim();
+        special           = String(r[12] || "").trim();
+        receivedDate      = String(r[0]  || "").trim();
+        acceptanceMethod  = String(r[1]  || "").trim();
+        workerGender      = String(r[7]  || "").trim(); // 依實際欄位調整
+        workerAge         = String(r[8]  || "").trim();
+      } else {
+        // 批次輸入表欄位
+        sourceCaseNo      = `batch-${String(r[1] || idx)}`;
+        customCaseNo      = String(r[1]  || "").trim();
+        worker            = String(r[3]  || "").trim();
+        employer          = String(r[10] || "").trim();
+        owner             = String(r[2]  || "").trim();
+        mediMode          = String(r[18] || "").trim();
+        dispute           = String(r[32] || "").trim();
+        special           = String(r[31] || "").trim();
+        receivedDate      = String(r[0]  || "").trim();
+        acceptanceMethod  = "";
+        workerGender      = "";
+        workerAge         = "";
+      }
+
+      reportCategory = reportCategoryFromMethod(mediMode);
+
+      return {
+        sourceCaseNo,
+        customCaseNo,
+        worker,
+        employer,
+        owner,
+        mediationMethodCode: mediMode,
+        disputeType: guessDisputeType(dispute),
+        claim: dispute,
+        specialCaseType: special && special !== "無" ? special : "無",
+        receivedDate,
+        acceptanceMethod,
+        workerGender,
+        workerAge,
+        reportCategory,
+      };
+    }).filter(item => item.worker || item.employer);
+
+    if (!imported.length) {
+      alert("匯入後沒有有效資料（勞方或資方欄位為空）。");
+      e.target.value = "";
+      return;
+    }
+
+    intakeCases = imported;
+    applicationBatchCases = [];
+    renderIntakeList();
+    alert(`匯入完成，共 ${imported.length} 筆待排案件。`);
+  } catch (err) {
+    alert("Excel 讀取失敗：" + err.message);
+  }
+  e.target.value = ""; // 清空 input，讓同一檔案可重複匯入
 }
 
 async function loadIntakeCases() {
@@ -287,13 +395,17 @@ function renderStats(filtered) {
 function renderIntakeList() {
   const scheduledSourceNos = new Set(cases.map((item) => item.sourceCaseNo).filter(Boolean));
   const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo));
-  elements.intakeSummary.textContent = `共 ${intakeCases.length} 筆，尚待排程 ${waiting.length} 筆；批次輸入補充 ${applicationBatchCases.length} 筆`;
+  if (intakeCases.length === 0) {
+    elements.intakeSummary.textContent = "尚未匯入收案資料，請點「匯入收案 Excel」";
+  } else {
+    elements.intakeSummary.textContent = `共 ${intakeCases.length} 筆，尚待排程 ${waiting.length} 筆`;
+  }
   elements.intakeList.innerHTML = "";
 
   if (waiting.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = intakeCases.length ? "本批收案都已建立排程" : "尚未匯入收案資料";
+    empty.textContent = intakeCases.length ? "本批收案都已建立排程" : "請點「匯入收案 Excel」載入當天收案資料";
     elements.intakeList.append(empty);
     return;
   }
