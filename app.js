@@ -1,3 +1,4 @@
+console.log("app.js version: 20260519g");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -304,6 +305,19 @@ async function importIntakeExcel(e) {
       }).filter(item => item.worker || item.employer);
     } else {
       // 系統匯出格式（用欄位名稱）
+      // DEBUG: 查看 rows 結構
+      const row1 = rows[1] || [];
+      const colCaseNo = col("自編案號");
+      const colWorker = col("勞方");
+      alert("DEBUG rows 資訊：\nrows.length=" + rows.length
+        + "\nrows[0].length=" + (rows[0]||[]).length
+        + "\nrows[1].length=" + row1.length
+        + "\ncol(自編案號)=" + colCaseNo
+        + "\ncol(勞方)=" + colWorker
+        + "\nrows[1][" + colCaseNo + "]=" + JSON.stringify(row1[colCaseNo])
+        + "\nrows[1][" + colWorker + "]=" + JSON.stringify(row1[colWorker])
+        + "\nrows[1] 前5格=" + JSON.stringify(row1.slice(0,5))
+      );
       const dataRows = rows.slice(1).filter(r =>
         String(r[col("自編案號")] || "").trim() || String(r[col("勞方")] || "").trim()
       );
