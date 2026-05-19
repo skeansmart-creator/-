@@ -476,9 +476,11 @@ function initImportExcel() {
     try {
       const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
+      const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false, sheetRows: 0 });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      // 移除篩選狀態，確保讀到所有列（包含被篩選隱藏的列）
+      if (ws['!autofilter']) delete ws['!autofilter'];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false });
 
       // 第1列為標題，從第2列開始讀資料（系統匯出格式）
       // 偵測是哪種格式：看第1列第1欄是否為「錄案日期」
