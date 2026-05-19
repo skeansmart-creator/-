@@ -172,6 +172,21 @@ document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
 elements.weekPicker.addEventListener("change", handleWeekChange);
+document.querySelector("#prevWeek").addEventListener("click", () => {
+  selectedWeekStart = addDays(selectedWeekStart, -7);
+  elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
+  render();
+});
+document.querySelector("#nextWeek").addEventListener("click", () => {
+  selectedWeekStart = addDays(selectedWeekStart, 7);
+  elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
+  render();
+});
+document.querySelector("#todayWeek").addEventListener("click", () => {
+  selectedWeekStart = startOfWeek(new Date());
+  elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
+  render();
+});
 elements.keyword.addEventListener("input", render);
 elements.statusFilter.addEventListener("change", render);
 elements.form.addEventListener("submit", saveCase);

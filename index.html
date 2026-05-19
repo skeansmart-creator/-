@@ -23,7 +23,12 @@
       <section class="toolbar" aria-label="查詢工具">
         <label>
           週別
-          <input id="weekPicker" type="week" />
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button id="prevWeek" type="button" class="icon-button" title="上一週">‹</button>
+            <input id="weekPicker" type="week" style="flex:1;" />
+            <button id="nextWeek" type="button" class="icon-button" title="下一週">›</button>
+            <button id="todayWeek" type="button" class="secondary-button" style="min-height:38px;font-size:13px;padding:0 10px;">本週</button>
+          </div>
         </label>
         <label>
           關鍵字
