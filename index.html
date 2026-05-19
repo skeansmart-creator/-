@@ -21,15 +21,7 @@
 
     <main class="app-shell">
       <section class="toolbar" aria-label="查詢工具">
-        <label>
-          週別
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button id="prevWeek" type="button" class="icon-button" title="上一週">‹</button>
-            <input id="weekPicker" type="week" style="flex:1;" />
-            <button id="nextWeek" type="button" class="icon-button" title="下一週">›</button>
-            <button id="todayWeek" type="button" class="secondary-button" style="min-height:38px;font-size:13px;padding:0 10px;">本週</button>
-          </div>
-        </label>
+
         <label>
           關鍵字
           <input id="keyword" type="search" placeholder="案號、當事人、調解人" />
@@ -79,9 +71,15 @@
 
       <section style="max-width:1480px;margin:18px auto 0;">
         <div class="calendar-panel">
-          <div class="panel-title">
+          <div class="panel-title" style="flex-wrap:wrap;gap:10px;">
             <h2>週排程</h2>
-            <p id="weekRange"></p>
+            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+              <button id="prevWeek" type="button" class="icon-button" title="上一週" style="font-size:18px;">«</button>
+              <input id="weekPicker" type="week" style="min-height:36px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;" />
+              <button id="nextWeek" type="button" class="icon-button" title="下一週" style="font-size:18px;">»</button>
+              <button id="todayWeek" type="button" class="secondary-button" style="min-height:36px;font-size:13px;padding:0 10px;">本週</button>
+            </div>
+            <p id="weekRange" style="width:100%;margin:0;padding:0 2px;"></p>
           </div>
           <div id="calendar" class="calendar" aria-label="週排程表"></div>
         </div>

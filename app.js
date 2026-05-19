@@ -482,12 +482,16 @@ function initImportExcel() {
 
       // 第1列為標題，從第2列開始讀資料（系統匯出格式）
       // 偵測是哪種格式：看第1列第1欄是否為「錄案日期」
-      const isSystemExport = rows.length > 0 && String(rows[0][0] || "").includes("錄案日期");
+      const firstCell = String(rows.length > 0 ? (rows[0][0] || "") : "").trim();
+      const isSystemExport = firstCell.includes("錄案日期");
       const dataRows = isSystemExport
-        ? rows.slice(1).filter(r => r[10]) // 系統匯出：從第2列，K欄(index10)=勞方不為空
-        : rows.slice(4).filter(r => r[3]);  // 批次輸入表：從第5列，D欄(index3)=勞方不為空
+        ? rows.slice(1).filter(r => String(r[2] || "").trim() || String(r[10] || "").trim()) // 系統匯出：自編案號或勞方有值
+        : rows.slice(4).filter(r => String(r[3] || "").trim()); // 批次輸入表：勞方姓名有值
 
-      if (!dataRows.length) { alert("找不到資料"); return; }
+      if (!dataRows.length) {
+        alert("找不到資料。\n格式偵測：" + (isSystemExport ? "系統匯出格式" : "批次輸入表格式") + "\n共" + rows.length + "列");
+        return;
+      }
 
       const r = dataRows[0];
 
