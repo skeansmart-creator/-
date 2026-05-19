@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519n");
+console.log("app.js version: 20260519o");
 const statusLabels = {
   scheduled: "已排定",
   changed: "改期",
@@ -592,8 +592,23 @@ function openCaseDialog(id, intakeItem) {
   document.querySelector("#femaleCount").value = item?.femaleCount ?? intakeItem?.femaleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "女");
   setSpecialCaseCheckboxes(item?.specialCaseType ?? intakeItem?.specialCaseType ?? "無");
   document.querySelector("#mediationMethodCode").value = item?.mediationMethodCode ?? intakeItem?.mediationMethodCode ?? document.querySelector("#reportCategory").value ?? "";
-  document.querySelector("#caseStatus").value = item?.status ?? "scheduled";
   document.querySelector("#notes").value = item?.notes ?? buildIntakeNotes(intakeItem) ?? "";
+
+  // 自動判斷狀態：編輯時保留原狀態；新增時依日期自動判斷
+  const today = toDateInputValue(new Date());
+  const meetingDateVal = item?.meetingDate ?? toDateInputValue(selectedWeekStart);
+  const autoStatus = item ? item.status : (meetingDateVal < today ? "finished" : "scheduled");
+  document.querySelector("#caseStatus").value = autoStatus;
+  // 重設子表單
+  const panel = document.getElementById("secondMeetingPanel");
+  panel.hidden = true;
+  document.getElementById("meetingDate2").value = "";
+  document.getElementById("meetingTime2").value = "";
+  document.getElementById("room2").value = "晤談室(一)";
+  document.getElementById("roomOther2").value = "";
+  document.getElementById("roomOther2Label").hidden = true;
+  document.getElementById("conflictWarning2").hidden = true;
+
   toggleOtherRoom();
   updateConflictWarning();
   elements.dialog.showModal();
@@ -709,6 +724,40 @@ function setSpecialCaseCheckboxes(value) {
   syncSpecialCaseType();
 }
 
+function onStatusChange() {
+  const status = document.querySelector("#caseStatus").value;
+  const panel = document.getElementById("secondMeetingPanel");
+  const title = document.getElementById("secondMeetingTitle");
+  const show = status === "changed" || status === "reschedule";
+  panel.hidden = !show;
+  if (show) {
+    title.textContent = status === "changed" ? "改期後的新時間" : "再次開會時間";
+  }
+  updateConflictWarning2();
+}
+
+function updateConflictWarning2() {
+  const panel = document.getElementById("secondMeetingPanel");
+  if (panel.hidden) return;
+  const id = document.querySelector("#caseId").value;
+  const meetingDate2 = document.getElementById("meetingDate2").value;
+  const meetingTime2 = document.getElementById("meetingTime2").value;
+  const room2val = document.getElementById("room2").value;
+  const roomOther2 = document.getElementById("roomOther2").value.trim();
+  const roomForConflict2 = room2val === "其他" ? roomOther2 || room2val : room2val;
+  const mediator = document.querySelector("#mediator").value.trim();
+  const warn = document.getElementById("conflictWarning2");
+  if (!meetingDate2 || !meetingTime2) { warn.hidden = true; return; }
+  const conflicts = cases.filter((item) => {
+    if (item.id === id) return false;
+    if (item.meetingDate !== meetingDate2 || item.meetingTime !== meetingTime2) return false;
+    return displayRoom(item) === roomForConflict2 || (mediator && item.mediator === mediator);
+  });
+  warn.hidden = !conflicts.length;
+  if (conflicts.length) warn.textContent = `提醒：新時間已有 ${conflicts.length} 筆可能衝突的排程，請確認。`;
+}
+
+
 function closeDialog() {
   elements.dialog.close();
 }
@@ -748,6 +797,30 @@ async function saveCase(event) {
     cases.push(next);
   }
   await saveRemoteCase(next);
+
+  // 若有第二次開會資料，自動新增一筆
+  const status = next.status;
+  if (status === "changed" || status === "reschedule") {
+    const date2 = document.getElementById("meetingDate2").value;
+    const time2 = document.getElementById("meetingTime2").value;
+    if (date2 && time2) {
+      const room2val = document.getElementById("room2").value;
+      const roomOther2 = document.getElementById("roomOther2").value.trim();
+      const next2 = {
+        ...next,
+        id: crypto.randomUUID(),
+        meetingDate: date2,
+        meetingTime: time2,
+        room: room2val,
+        roomOther: room2val === "其他" ? roomOther2 : "",
+        status: "scheduled",
+        notes: (next.notes ? next.notes + "　" : "") + (status === "changed" ? "【改期】" : "【再次開會】"),
+      };
+      cases.push(next2);
+      await saveRemoteCase(next2);
+    }
+  }
+
   selectedWeekStart = startOfWeek(parseDate(next.meetingDate));
   elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
   persist();
