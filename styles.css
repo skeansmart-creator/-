@@ -415,3 +415,8 @@ form {
     grid-template-columns: 1fr;
   }
 }
+
+.case-card.special {
+  border-left-color: #7c3aed;
+  background: #faf5ff;
+}

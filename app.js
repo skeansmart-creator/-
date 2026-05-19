@@ -140,6 +140,7 @@ const sampleCases = [
 
 let cases = loadCases();
 let intakeCases = [];
+let dismissedIntake = new Set(JSON.parse(localStorage.getItem('dismissedIntake') || '[]'));
 let applicationBatchCases = [];
 let selectedWeekStart = startOfWeek(new Date());
 
@@ -270,7 +271,7 @@ function renderStats(filtered) {
 
 function renderIntakeList() {
   const scheduledSourceNos = new Set(cases.map((item) => item.sourceCaseNo).filter(Boolean));
-  const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo));
+  const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo) && !dismissedIntake.has(item.sourceCaseNo));
   elements.intakeSummary.textContent = `共 ${intakeCases.length} 筆，尚待排程 ${waiting.length} 筆；批次輸入補充 ${applicationBatchCases.length} 筆`;
   elements.intakeList.innerHTML = "";
 
@@ -297,7 +298,21 @@ function renderIntakeList() {
     button.type = "button";
     button.textContent = "安排";
     button.addEventListener("click", () => openCaseDialog(null, item));
-    card.append(button);
+    const dismissBtn = document.createElement("button");
+    dismissBtn.className = "danger-button";
+    dismissBtn.type = "button";
+    dismissBtn.style.minHeight = "32px";
+    dismissBtn.style.fontSize = "13px";
+    dismissBtn.textContent = "不排程";
+    dismissBtn.addEventListener("click", () => {
+      dismissedIntake.add(item.sourceCaseNo);
+      localStorage.setItem("dismissedIntake", JSON.stringify([...dismissedIntake]));
+      renderIntakeList();
+    });
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;gap:8px;";
+    btnRow.append(button, dismissBtn);
+    card.append(btnRow);
     elements.intakeList.append(card);
   });
 }
@@ -352,12 +367,15 @@ function renderCaseList(filtered) {
 
 function createCaseCard(item) {
   const button = document.createElement("button");
-  button.className = `case-card ${item.status}`;
+  const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
+  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}`;
   button.type = "button";
+  const specialTag = isSpecial ? `<small style="color:#7c3aed;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
   button.innerHTML = `
     <strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>
     <small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>
     <small>${escapeHtml(item.room)}｜${escapeHtml(item.mediator)}</small>
+    ${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
@@ -423,7 +441,7 @@ function openCaseDialog(id, intakeItem) {
   document.querySelector("#workerAge").value = item?.workerAge ?? intakeItem?.workerAge ?? "";
   document.querySelector("#maleCount").value = item?.maleCount ?? intakeItem?.maleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "男");
   document.querySelector("#femaleCount").value = item?.femaleCount ?? intakeItem?.femaleCount ?? inferGenderCount(item?.workerGender ?? intakeItem?.workerGender, "女");
-  document.querySelector("#specialCaseType").value = item?.specialCaseType ?? intakeItem?.specialCaseType ?? "";
+  setSpecialCaseCheckboxes(item?.specialCaseType ?? intakeItem?.specialCaseType ?? "無");
   document.querySelector("#mediationMethodCode").value = item?.mediationMethodCode ?? intakeItem?.mediationMethodCode ?? document.querySelector("#reportCategory").value ?? "";
   document.querySelector("#caseStatus").value = item?.status ?? "scheduled";
   document.querySelector("#notes").value = item?.notes ?? buildIntakeNotes(intakeItem) ?? "";
@@ -482,6 +500,24 @@ function initImportExcel() {
       alert("Excel 讀取失敗：" + err.message);
     }
   });
+}
+
+function syncSpecialCaseType() {
+  const checkboxes = ["special_disaster","special_bully","special_harass","special_gender","special_employ"];
+  const checked = checkboxes
+    .map(id => document.getElementById(id))
+    .filter(el => el && el.checked)
+    .map(el => el.value);
+  document.getElementById("specialCaseType").value = checked.length ? checked.join("、") : "無";
+}
+
+function setSpecialCaseCheckboxes(value) {
+  const checkboxes = ["special_disaster","special_bully","special_harass","special_gender","special_employ"];
+  checkboxes.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = value && value !== "無" && value.includes(el.value);
+  });
+  syncSpecialCaseType();
 }
 
 function closeDialog() {

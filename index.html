@@ -72,7 +72,7 @@
         </article>
       </section>
 
-      <section class="content-grid">
+      <section style="max-width:1480px;margin:18px auto 0;">
         <div class="calendar-panel">
           <div class="panel-title">
             <h2>週排程</h2>
@@ -80,14 +80,16 @@
           </div>
           <div id="calendar" class="calendar" aria-label="週排程表"></div>
         </div>
+      </section>
 
-        <aside class="side-panel">
+      <section style="max-width:1480px;margin:18px auto 0;">
+        <div class="side-panel" style="width:100%;">
           <div class="panel-title">
             <h2>案件清單</h2>
             <p>點選案件可編輯</p>
           </div>
-          <div id="caseList" class="case-list"></div>
-        </aside>
+          <div id="caseList" class="case-list" style="max-height:320px;"></div>
+        </div>
       </section>
     </main>
 
@@ -208,9 +210,24 @@
               <option value="JH">JH - 指派調解人(臺中市職業災害法律服務協會)</option>
             </select>
           </label>
-          <label>
-            特殊案件類型
-            <input id="specialCaseType" />
+          <label class="full" style="flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span style="color:var(--muted);font-size:13px;font-weight:700;min-width:100%;">特殊案件類型</span>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
+              <input type="checkbox" id="special_disaster" value="職業災害" onchange="syncSpecialCaseType()"> 職業災害
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
+              <input type="checkbox" id="special_bully" value="職場霸凌" onchange="syncSpecialCaseType()"> 職場霸凌
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
+              <input type="checkbox" id="special_harass" value="性騷擾" onchange="syncSpecialCaseType()"> 性騷擾
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
+              <input type="checkbox" id="special_gender" value="性別歧視" onchange="syncSpecialCaseType()"> 性別歧視
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;color:var(--text);">
+              <input type="checkbox" id="special_employ" value="就業歧視" onchange="syncSpecialCaseType()"> 就業歧視
+            </label>
+            <input id="specialCaseType" type="hidden" value="無" />
           </label>
           <label>
             狀態
