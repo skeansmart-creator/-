@@ -140,7 +140,7 @@ const sampleCases = [
 
 let cases = loadCases();
 let intakeCases = [];
-let dismissedIntake = new Set(JSON.parse(localStorage.getItem('dismissedIntake') || '[]'));
+
 let applicationBatchCases = [];
 let selectedWeekStart = startOfWeek(new Date());
 
@@ -286,7 +286,7 @@ function renderStats(filtered) {
 
 function renderIntakeList() {
   const scheduledSourceNos = new Set(cases.map((item) => item.sourceCaseNo).filter(Boolean));
-  const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo) && !dismissedIntake.has(item.sourceCaseNo));
+  const waiting = intakeCases.filter((item) => !scheduledSourceNos.has(item.sourceCaseNo));
   elements.intakeSummary.textContent = `共 ${intakeCases.length} 筆，尚待排程 ${waiting.length} 筆；批次輸入補充 ${applicationBatchCases.length} 筆`;
   elements.intakeList.innerHTML = "";
 
@@ -320,8 +320,7 @@ function renderIntakeList() {
     dismissBtn.style.fontSize = "13px";
     dismissBtn.textContent = "不排程";
     dismissBtn.addEventListener("click", () => {
-      dismissedIntake.add(item.sourceCaseNo);
-      localStorage.setItem("dismissedIntake", JSON.stringify([...dismissedIntake]));
+      intakeCases = intakeCases.filter(c => c.sourceCaseNo !== item.sourceCaseNo);
       renderIntakeList();
     });
     const btnRow = document.createElement("div");
