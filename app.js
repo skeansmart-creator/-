@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520j");
+console.log("app.js version: 20260520k");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -664,12 +664,12 @@ function renderRoomUsage(weekDates, filtered) {
   // Y軸：星期 × 時段
   weekDates.forEach((date, di) => {
     const dateKey = toDateInputValue(date);
+    const dateLabel = `${date.getMonth()+1}/${date.getDate()}`;
     slots.forEach((slot, si) => {
       const isFirstSlot = si === 0;
       html += `<tr>`;
-      // 時段標籤
-      html += `<td style="padding:6px 10px;border:1px solid #e2e8f0;font-weight:${isFirstSlot?'700':'400'};background:#fafafa;white-space:nowrap;">
-        ${isFirstSlot ? `<div style="font-weight:700;">${days[di]}</div>` : ""}
+      html += `<td style="padding:6px 10px;border:1px solid #e2e8f0;background:#fafafa;white-space:nowrap;">
+        ${isFirstSlot ? `<div style="font-weight:700;">${days[di]} <span style="font-weight:400;color:var(--muted);font-size:11px;">${dateLabel}</span></div>` : ""}
         <div style="color:var(--muted);font-size:11px;">${slot}</div>
       </td>`;
       // 各會議室格子
@@ -1265,9 +1265,24 @@ function exportCsv() {
 }
 
 function exportWeeklyReport() {
+  // 地點排序
+  const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
+  const weekRoomRank = (item) => {
+    const r = displayRoom(item);
+    const idx = weekRoomOrder.indexOf(r);
+    return idx >= 0 ? idx : weekRoomOrder.length;
+  };
+
   const rows = getFilteredCases()
     .slice()
-    .sort((a, b) => `${a.meetingDate} ${a.meetingTime} ${a.room}`.localeCompare(`${b.meetingDate} ${b.meetingTime} ${b.room}`));
+    .sort((a, b) => {
+      const dateCompare = a.meetingDate.localeCompare(b.meetingDate);
+      if (dateCompare !== 0) return dateCompare;
+      const timeCompare = a.meetingTime.localeCompare(b.meetingTime);
+      if (timeCompare !== 0) return timeCompare;
+      return weekRoomRank(a) - weekRoomRank(b);
+    });
+
   const weekEnd = addDays(selectedWeekStart, 4);
   const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
   const dispatcher = "";
@@ -1276,7 +1291,7 @@ function exportWeeklyReport() {
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
-    item.meetingTime.replace(":", ""),
+    item.meetingTime,  // 直接使用 HH:MM 格式
     ["withdrawn", "cancelled"].includes(item.status) ? statusLabels[item.status] : item.worker,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.employer,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
