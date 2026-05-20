@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520k");
+console.log("app.js version: 20260520l");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -835,7 +835,7 @@ function createCaseCard(item, isConflict = false) {
   const isCommitteeType = item.reportCategory === "F";
   button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
   button.type = "button";
-  const specialTag = isSpecial ? `<small style="color:#7c3aed;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
+  const specialTag = isSpecial ? `<small style="color:#dc2626;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
   const conflictTag = isConflict ? `<small style="color:#dc2626;font-weight:700;">⚠ 衝期</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
