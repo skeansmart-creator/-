@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520a");
+console.log("app.js version: 20260520b");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -407,7 +407,17 @@ async function importAssocExcel(e) {
 
     // 日期格式轉換（支援 2025-10-08 及 115/10/08）
     const parseAssocDate = (val) => {
-      const s = String(val || "").trim();
+      if (!val && val !== 0) return "";
+      // Excel 日期序號（數字）→ 轉換為西元日期
+      if (typeof val === "number" || (!isNaN(Number(val)) && String(val).length <= 5)) {
+        const num = Number(val);
+        if (num > 40000 && num < 60000) {
+          const base = new Date(1899, 11, 30);
+          base.setDate(base.getDate() + num);
+          return base.toISOString().slice(0, 10);
+        }
+      }
+      const s = String(val).trim();
       if (!s) return "";
       // 西元 2025-10-08 或 2025/10/08
       if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return s.replace(/\//g, "-");
