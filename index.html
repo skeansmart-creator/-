@@ -244,7 +244,8 @@
           </label>
           <label>
             調解方式
-            <select id="reportCategory" onchange="onReportCategoryChange()">
+            <select id="reportCategory" onchange="onReportCategoryChange()" required>
+              <option value="">請選擇</option>
               <option value="A">A - 台中市勞資關係協會</option>
               <option value="B">B - 臺中市（縣）勞資關係協會</option>
               <option value="E">E - 台中市勞雇關係協會</option>
@@ -325,14 +326,14 @@
         <div class="dialog-actions">
           <button id="deleteCase" class="danger-button" type="button">刪除</button>
           <span></span>
-          <button class="secondary-button" id="cancelEdit" type="button">取消</button>
-          <button class="primary-button" type="submit">儲存</button>
+          <button class="secondary-button" id="cancelEdit" type="button" style="min-width:80px;">取消</button>
+          <button class="primary-button" type="submit" style="min-width:120px;font-size:15px;padding:0 24px;">儲存</button>
         </div>
       </form>
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260520g"></script>
+    <script src="app.js?v=20260520h"></script>
   </body>
 </html>
