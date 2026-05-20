@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520i");
+console.log("app.js version: 20260520j");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -575,29 +575,33 @@ function renderRoomUsage(weekDates, filtered) {
   const summary   = document.getElementById("roomUsageSummary");
   if (!container) return;
 
-  const rooms = ["晤談室(一)", "晤談室(四)", "晤談室(二)", "晤談室(三)", "勞資爭議調解會議室"];
+  // 固定會議室順序（X軸，左到右）
+  const fixedRoomOrder = ["晤談室(一)", "晤談室(三)", "晤談室(四)", "勞資爭議調解會議室", "晤談室(二)"];
   const slots  = ["09:00", "10:30", "13:30", "15:00"];
   const days   = ["週一", "週二", "週三", "週四", "週五"];
-  const totalSlots = rooms.length * slots.length * 5; // 5天
 
   // 建立查找 map：room → date → time → items[]
   const lookup = {};
+  const otherRooms = new Set();
   filtered.forEach(item => {
     if (["withdrawn","cancelled"].includes(item.status)) return;
     const r = displayRoom(item);
+    if (!fixedRoomOrder.includes(r)) otherRooms.add(r);
     if (!lookup[r]) lookup[r] = {};
     if (!lookup[r][item.meetingDate]) lookup[r][item.meetingDate] = {};
     if (!lookup[r][item.meetingDate][item.meetingTime]) lookup[r][item.meetingDate][item.meetingTime] = [];
     lookup[r][item.meetingDate][item.meetingTime].push(item);
   });
 
+  // 完整會議室列表（固定 + 其他）
+  const rooms = [...fixedRoomOrder, ...Array.from(otherRooms).sort()];
+
   // 統計
   let totalUsed = 0;
   const roomUsed = {};
-  const slotUsed = {};
+  const slotDayUsed = {}; // key: date|slot
 
   rooms.forEach(room => { roomUsed[room] = 0; });
-  slots.forEach(slot => { slotUsed[slot] = 0; });
 
   rooms.forEach(room => {
     slots.forEach(slot => {
@@ -607,21 +611,17 @@ function renderRoomUsage(weekDates, filtered) {
         if (items.length > 0) {
           totalUsed++;
           roomUsed[room]++;
-          slotUsed[slot]++;
+          const k = `${dateKey}|${slot}`;
+          slotDayUsed[k] = (slotDayUsed[k] || 0) + 1;
         }
       });
     });
   });
 
-  // 產出表格
-  const pct = v => Math.round(v / (rooms.length * slots.length * 5) * 100 * 10) / 10;
-  const roomPct = room => Math.round(roomUsed[room] / (slots.length * 5) * 100);
-  const slotPct = slot => Math.round(slotUsed[slot] / (rooms.length * 5) * 100);
-
   // 顏色函式
   const cellColor = (items) => {
     if (!items || items.length === 0) return { bg: "#f9fafb", text: "", border: "#e5e7eb" };
-    if (items.length > 1) return { bg: "#fee2e2", text: "#dc2626", border: "#fca5a5" }; // 衝期
+    if (items.length > 1) return { bg: "#fee2e2", text: "#dc2626", border: "#fca5a5" };
     const item = items[0];
     if (item.reportCategory === "F") return { bg: "#f5f3ff", text: "#7c3aed", border: "#c4b5fd" };
     if (item.status === "finished")  return { bg: "#f0fdf4", text: "#16a34a", border: "#86efac" };
@@ -630,72 +630,75 @@ function renderRoomUsage(weekDates, filtered) {
   };
 
   const usageBarHtml = (pctVal, color) => `
-    <div style="height:6px;background:#e5e7eb;border-radius:3px;margin-top:4px;overflow:hidden;">
-      <div style="height:100%;width:${pctVal}%;background:${color};border-radius:3px;transition:width .3s;"></div>
+    <div style="height:5px;background:#e5e7eb;border-radius:3px;margin-top:3px;overflow:hidden;">
+      <div style="height:100%;width:${pctVal}%;background:${color};border-radius:3px;"></div>
     </div>`;
 
-  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px;">`;
+  const pctColor = p => p >= 80 ? "#dc2626" : p >= 50 ? "#f59e0b" : "#10b981";
+  const roomPct = room => rooms.includes(room) ? Math.round(roomUsed[room] / (slots.length * 5) * 100) : 0;
 
-  // 表頭：星期 × 時段
+  const shortRoom = r => r
+    .replace("勞資爭議調解會議室", "調解室")
+    .replace("晤談室(一)", "晤談一")
+    .replace("晤談室(二)", "晤談二")
+    .replace("晤談室(三)", "晤談三")
+    .replace("晤談室(四)", "晤談四");
+
+  // Y軸=時段×星期，X軸=會議室
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">`;
+
+  // 表頭：會議室（X軸）
   html += `<thead><tr>
-    <th style="padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;min-width:130px;">會議室</th>`;
-  days.forEach((day, di) => {
-    slots.forEach(slot => {
-      html += `<th style="padding:6px 4px;background:#f8fafc;border:1px solid #e2e8f0;text-align:center;font-weight:600;min-width:52px;">
-        <div>${day}</div><div style="color:var(--muted);font-weight:400;">${slot}</div>
-      </th>`;
-    });
-  });
-  html += `<th style="padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;min-width:80px;text-align:center;">使用率</th></tr></thead>`;
-
-  // 資料列
-  html += `<tbody>`;
+    <th style="padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;min-width:80px;">時段</th>`;
   rooms.forEach(room => {
-    const shortRoom = room.replace("勞資爭議調解會議室", "調解室").replace("晤談室", "晤談");
     const rPct = roomPct(room);
-    const barColor = rPct >= 80 ? "#dc2626" : rPct >= 50 ? "#f59e0b" : "#10b981";
-    html += `<tr>
-      <td style="padding:8px 10px;border:1px solid #e2e8f0;font-weight:600;background:#fafafa;">${shortRoom}</td>`;
-    weekDates.forEach(date => {
-      const dateKey = toDateInputValue(date);
-      slots.forEach(slot => {
+    const bc = pctColor(rPct);
+    html += `<th style="padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;text-align:center;font-weight:600;min-width:72px;">
+      <div>${shortRoom(room)}</div>
+      <div style="font-size:10px;font-weight:400;color:${bc};margin-top:2px;">${rPct}% (${roomUsed[room]}/${slots.length*5})</div>
+      ${usageBarHtml(rPct, bc)}
+    </th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  // Y軸：星期 × 時段
+  weekDates.forEach((date, di) => {
+    const dateKey = toDateInputValue(date);
+    slots.forEach((slot, si) => {
+      const isFirstSlot = si === 0;
+      html += `<tr>`;
+      // 時段標籤
+      html += `<td style="padding:6px 10px;border:1px solid #e2e8f0;font-weight:${isFirstSlot?'700':'400'};background:#fafafa;white-space:nowrap;">
+        ${isFirstSlot ? `<div style="font-weight:700;">${days[di]}</div>` : ""}
+        <div style="color:var(--muted);font-size:11px;">${slot}</div>
+      </td>`;
+      // 各會議室格子
+      rooms.forEach(room => {
         const items = lookup[room]?.[dateKey]?.[slot] || [];
-        const { bg, text, border } = cellColor(items);
-        const label = items.length === 0 ? "" :
-          items.length > 1 ? `⚠${items.length}` :
-          (items[0].worker ? items[0].worker.slice(0, 3) : "●");
-        html += `<td style="padding:4px;border:1px solid #e2e8f0;background:${bg};text-align:center;cursor:${items.length ? 'pointer' : 'default'};color:${text};"
-          title="${items.map(i => `${i.worker}／${i.employer}`).join('\n') || ''}"
+        const { bg, text } = cellColor(items);
+        // 顯示調解人
+        const mediatorLabel = items.length === 0 ? "" :
+          items.length > 1 ? `⚠${items.length}筆` :
+          (getMediatorDisplay(items[0]) || "●").slice(0, 4);
+        html += `<td style="padding:4px 6px;border:1px solid #e2e8f0;background:${bg};text-align:center;cursor:${items.length?'pointer':'default'};color:${text};"
+          title="${items.map(i=>`${i.worker}｜調解人：${getMediatorDisplay(i)}`).join('\n')}"
           onclick="${items.length ? `openCaseDialog('${items[0].id}')` : ''}">
-          <span style="font-size:11px;">${escapeHtml(label)}</span>
+          <span style="font-size:11px;">${escapeHtml(mediatorLabel)}</span>
         </td>`;
       });
+      html += `</tr>`;
     });
-    html += `<td style="padding:8px;border:1px solid #e2e8f0;text-align:center;">
-      <strong style="color:${barColor};">${rPct}%</strong>
-      <div style="font-size:10px;color:var(--muted);">${roomUsed[room]}/${slots.length * 5}</div>
-      ${usageBarHtml(rPct, barColor)}
-    </td></tr>`;
+    // 分隔線（每天之間）
+    if (di < weekDates.length - 1) {
+      html += `<tr><td colspan="${rooms.length + 1}" style="height:4px;background:#e2e8f0;padding:0;border:none;"></td></tr>`;
+    }
   });
 
-  // 時段使用率列
-  html += `<tr><td style="padding:8px 10px;border:1px solid #e2e8f0;font-weight:700;background:#f8fafc;color:var(--muted);">時段使用率</td>`;
-  weekDates.forEach(() => {
-    slots.forEach(slot => {
-      const sPct = slotPct(slot);
-      const c = sPct >= 80 ? "#dc2626" : sPct >= 50 ? "#f59e0b" : "#94a3b8";
-      html += `<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;background:#f8fafc;">
-        <span style="font-size:11px;font-weight:600;color:${c};">${sPct}%</span>
-      </td>`;
-    });
-  });
-  html += `<td style="border:1px solid #e2e8f0;background:#f8fafc;"></td></tr>`;
   html += `</tbody></table>`;
-
   container.innerHTML = html;
 
   const overallPct = Math.round(totalUsed / (rooms.length * slots.length * 5) * 100);
-  const overallColor = overallPct >= 80 ? "#dc2626" : overallPct >= 50 ? "#f59e0b" : "#10b981";
+  const overallColor = pctColor(overallPct);
   summary.innerHTML = `本週整體使用率 <strong style="color:${overallColor};">${overallPct}%</strong>（${totalUsed}/${rooms.length * slots.length * 5} 時段）`;
 }
 
