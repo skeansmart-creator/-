@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520f");
+console.log("app.js version: 20260520g");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -699,7 +699,8 @@ function createCaseCard(item, isConflict = false) {
   const button = document.createElement("button");
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
   const isReserved = item.status === "reserved";
-  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}`;
+  const isCommitteeType = item.reportCategory === "F";
+  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
   button.type = "button";
   const specialTag = isSpecial ? `<small style="color:#7c3aed;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
   const conflictTag = isConflict ? `<small style="color:#dc2626;font-weight:700;">⚠ 衝期</small>` : "";
