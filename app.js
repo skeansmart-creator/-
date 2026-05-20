@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520c");
+console.log("app.js version: 20260520d");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -449,7 +449,8 @@ async function importAssocExcel(e) {
       const roomOther = room === "其他" ? (get(r, "其他地點") || rawRoom) : "";
       const mediMode = get(r, "調解方式").toUpperCase();
       const dispute  = get(r, "主要爭議");
-      const dateVal  = parseAssocDate(get(r, "開會日期"));
+      const rawDateVal = headerMap["開會日期"] >= 0 ? r[headerMap["開會日期"]] : "";
+      const dateVal  = parseAssocDate(rawDateVal);
       const today    = toDateInputValue(new Date());
       return {
         id:                 crypto.randomUUID(),
