@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519s");
+console.log("app.js version: 20260519t");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -776,12 +776,17 @@ function onStatusChange() {
   document.getElementById("owner").required    = !isReserved;
   // 調解人欄位必填跟著調解方式走，預約時全部不必填
   if (isReserved) {
-    document.getElementById("mediator").required     = false;
+    document.getElementById("mediator").required      = false;
     document.getElementById("mediatorChair").required = false;
     document.getElementById("mediatorLabor").required = false;
     document.getElementById("mediatorMgmt").required  = false;
+    // 預約時顯示單一調解人欄即可
+    document.getElementById("mediatorSingleLabel").style.display = "";
+    document.getElementById("mediatorChairLabel").style.display  = "none";
+    document.getElementById("mediatorLaborLabel").style.display  = "none";
+    document.getElementById("mediatorMgmtLabel").style.display   = "none";
   } else {
-    onReportCategoryChange(); // 還原調解方式控制的必填
+    onReportCategoryChange();
   }
 
   updateConflictWarning2();
@@ -1126,14 +1131,14 @@ function getMediatorDisplay(item) {
 // 切換調解委員會欄位
 function onReportCategoryChange() {
   const isF = document.querySelector("#reportCategory").value === "F";
-  document.getElementById("mediatorSingleLabel").hidden = isF;
-  document.getElementById("mediatorChairLabel").hidden = !isF;
-  document.getElementById("mediatorLaborLabel").hidden = !isF;
-  document.getElementById("mediatorMgmtLabel").hidden = !isF;
-  document.getElementById("mediator").required = !isF;
+  document.getElementById("mediatorSingleLabel").style.display = isF ? "none" : "";
+  document.getElementById("mediatorChairLabel").style.display  = isF ? "" : "none";
+  document.getElementById("mediatorLaborLabel").style.display  = isF ? "" : "none";
+  document.getElementById("mediatorMgmtLabel").style.display   = isF ? "" : "none";
+  document.getElementById("mediator").required      = !isF;
   document.getElementById("mediatorChair").required = isF;
   document.getElementById("mediatorLabor").required = isF;
-  document.getElementById("mediatorMgmt").required = isF;
+  document.getElementById("mediatorMgmt").required  = isF;
 }
 
 // 從 mediator 欄位字串解析三委員
