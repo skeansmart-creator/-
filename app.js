@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520d");
+console.log("app.js version: 20260520e");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -408,20 +408,20 @@ async function importAssocExcel(e) {
     // 日期格式轉換（支援 2025-10-08 及 115/10/08）
     const parseAssocDate = (val) => {
       if (!val && val !== 0) return "";
-      // Excel 日期序號（數字）→ 轉換為西元日期
-      if (typeof val === "number" || (!isNaN(Number(val)) && String(val).length <= 5)) {
-        const num = Number(val);
-        if (num > 40000 && num < 60000) {
-          const base = new Date(1899, 11, 30);
-          base.setDate(base.getDate() + num);
-          return base.toISOString().slice(0, 10);
-        }
+      // Excel 日期序號（數字）→ 用 UTC 避免時區偏移
+      const num = Number(val);
+      if (!isNaN(num) && num > 40000 && num < 60000) {
+        // Excel 基準日 1899-12-30，用 UTC 毫秒計算
+        const ms = (num - 25569) * 86400 * 1000; // 25569 = days from 1970-01-01 to 1899-12-30
+        const d = new Date(ms);
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
       }
       const s = String(val).trim();
       if (!s) return "";
-      // 西元 2025-10-08 或 2025/10/08
       if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return s.replace(/\//g, "-");
-      // 民國 115/10/08 或 115-10-08
       const m = s.match(/^(\d{2,3})[-/](\d{1,2})[-/](\d{1,2})$/);
       if (m) {
         const y = parseInt(m[1]) + 1911;
