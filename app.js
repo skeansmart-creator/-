@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519t");
+console.log("app.js version: 20260519v");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -171,6 +171,8 @@ document.querySelector("#newCase").addEventListener("click", () => openCaseDialo
 initImportExcel();
 document.querySelector("#importIntakeBtn").addEventListener("click", () => document.querySelector("#intakeExcelInput").click());
 document.querySelector("#intakeExcelInput").addEventListener("change", importIntakeExcel);
+document.querySelector("#importAssocBtn").addEventListener("click", () => document.querySelector("#assocExcelInput").click());
+document.querySelector("#assocExcelInput").addEventListener("change", importAssocExcel);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
@@ -364,6 +366,135 @@ async function importIntakeExcel(e) {
     applicationBatchCases = [];
     renderIntakeList();
     alert(`匯入完成，共 ${intakeCases.length} 筆待排案件。`);
+  } catch (err) {
+    alert("Excel 讀取失敗：" + err.message);
+  }
+  e.target.value = "";
+}
+
+async function importAssocExcel(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    fixSheetRef(ws);
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+    // 第1列標題、第2列說明，資料從第3列開始
+    if (rows.length < 3) {
+      alert("找不到資料（資料需從第3列開始）。");
+      e.target.value = "";
+      return;
+    }
+
+    // 建立 headerMap
+    const headerMap = {};
+    rows[0].forEach((h, i) => { if (h) headerMap[String(h).trim()] = i; });
+    const get = (row, name) => (name in headerMap) ? String(row[headerMap[name]] ?? "").trim() : "";
+
+    // 欄位對應（依範例格式）
+    // 開會日期|開會時間|地點|其他地點|勞方|資方|主要爭議|承辦人|調解人|紀錄|調解方式|案號|備註
+    const dataRows = rows.slice(2).filter(r => get(r, "勞方") || get(r, "資方"));
+
+    if (!dataRows.length) {
+      alert("找不到有效資料列（勞方或資方須有值）。");
+      e.target.value = "";
+      return;
+    }
+
+    // 日期格式轉換（支援 2025-10-08 及 115/10/08）
+    const parseAssocDate = (val) => {
+      const s = String(val || "").trim();
+      if (!s) return "";
+      // 西元 2025-10-08 或 2025/10/08
+      if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return s.replace(/\//g, "-");
+      // 民國 115/10/08 或 115-10-08
+      const m = s.match(/^(\d{2,3})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if (m) {
+        const y = parseInt(m[1]) + 1911;
+        return `${y}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+      }
+      return s;
+    };
+
+    // 時間格式轉換（0900 → 09:00）
+    const parseAssocTime = (val) => {
+      const s = String(val || "").trim().replace(":", "").padStart(4, "0");
+      return /^\d{4}$/.test(s) ? `${s.slice(0,2)}:${s.slice(2)}` : "09:00";
+    };
+
+    // 地點對應
+    const roomMapAssoc = {
+      "晤談室(一)": "晤談室(一)", "晤談室(二)": "晤談室(二)",
+      "晤談室(三)": "晤談室(三)", "晤談室(四)": "晤談室(四)",
+      "勞資爭議調解會議室": "勞資爭議調解會議室",
+    };
+
+    const newCases = dataRows.map(r => {
+      const rawRoom  = get(r, "地點");
+      const room     = roomMapAssoc[rawRoom] || "其他";
+      const roomOther = room === "其他" ? (get(r, "其他地點") || rawRoom) : "";
+      const mediMode = get(r, "調解方式").toUpperCase();
+      const dispute  = get(r, "主要爭議");
+      const dateVal  = parseAssocDate(get(r, "開會日期"));
+      const today    = toDateInputValue(new Date());
+      return {
+        id:                 crypto.randomUUID(),
+        sourceCaseNo:       "",
+        caseNo:             get(r, "案號"),
+        meetingDate:        dateVal,
+        meetingTime:        parseAssocTime(get(r, "開會時間")),
+        room,
+        roomOther,
+        worker:             get(r, "勞方"),
+        employer:           get(r, "資方"),
+        mediator:           get(r, "調解人"),
+        recorder:           get(r, "紀錄"),
+        owner:              get(r, "承辦人"),
+        disputeType:        guessDisputeType(dispute) || dispute || "其他",
+        reportCategory:     mediMode || "A",
+        workerGender:       "",
+        workerAge:          "",
+        maleCount:          0,
+        femaleCount:        0,
+        specialCaseType:    "無",
+        mediationMethodCode: mediMode,
+        status:             dateVal && dateVal < today ? "finished" : "scheduled",
+        notes:              get(r, "備註"),
+      };
+    });
+
+    if (!newCases.length) {
+      alert("沒有可匯入的資料。");
+      e.target.value = "";
+      return;
+    }
+
+    // 批量寫入 Supabase
+    const batchSize = 100;
+    let total = 0, errors = 0;
+    for (let i = 0; i < newCases.length; i += batchSize) {
+      const batch = newCases.slice(i, i + batchSize);
+      const { error } = await supabaseClient
+        .from("mediation_schedules")
+        .upsert(batch.map(toDbCase), { onConflict: "id" });
+      if (error) {
+        console.error("批次失敗:", error.message);
+        errors++;
+      } else {
+        total += batch.length;
+      }
+    }
+
+    // 更新本地 cases
+    cases.push(...newCases);
+    persist();
+    render();
+
+    alert(`協會案件匯入完成：${total} 筆成功${errors ? "，" + errors + " 批失敗" : ""}。`);
   } catch (err) {
     alert("Excel 讀取失敗：" + err.message);
   }
