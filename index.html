@@ -32,6 +32,9 @@
       <div class="header-actions">
         <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
         <button id="exportWeeklyReport" class="secondary-button" type="button">產出週報表</button>
+        <button id="backupData" class="secondary-button" type="button">備份資料</button>
+        <input id="restoreInput" type="file" accept=".json" style="display:none" />
+        <button id="restoreData" class="secondary-button" type="button">還原備份</button>
         <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
         <button id="importAssocBtn" class="secondary-button" type="button">協會匯入案件 Excel</button>
         <button id="newCase" class="primary-button" type="button">新增排程</button>
@@ -323,6 +326,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260520e"></script>
+    <script src="app.js?v=20260520f"></script>
   </body>
 </html>

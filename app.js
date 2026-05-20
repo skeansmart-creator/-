@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520e");
+console.log("app.js version: 20260520f");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -173,6 +173,9 @@ document.querySelector("#importIntakeBtn").addEventListener("click", () => docum
 document.querySelector("#intakeExcelInput").addEventListener("change", importIntakeExcel);
 document.querySelector("#importAssocBtn").addEventListener("click", () => document.querySelector("#assocExcelInput").click());
 document.querySelector("#assocExcelInput").addEventListener("change", importAssocExcel);
+document.querySelector("#backupData").addEventListener("click", backupData);
+document.querySelector("#restoreData").addEventListener("click", () => document.querySelector("#restoreInput").click());
+document.querySelector("#restoreInput").addEventListener("change", restoreData);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
@@ -1493,7 +1496,76 @@ function buildIntakeNotes(item) {
   return parts.join("；");
 }
 
-// xlsx.js 0.18.5 bug 修正：某些 Excel 的 ws['!ref'] 只包含標題列
+async function backupData() {
+  // 從 Supabase 讀取全部資料
+  const pageSize = 1000;
+  let allData = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from("mediation_schedules")
+      .select("*")
+      .order("meeting_date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) { alert("備份失敗：" + error.message); return; }
+    allData = allData.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}_${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+  const filename = `排程備份_${ts}.json`;
+  const blob = new Blob([JSON.stringify(allData, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  alert(`備份完成：共 ${allData.length} 筆，已下載 ${filename}`);
+}
+
+async function restoreData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = "";
+
+  const confirmed = confirm(
+    `即將從備份檔「${file.name}」還原資料。\n` +
+    `這會把備份中的資料寫回 Supabase（不會刪除現有資料，只會新增/覆蓋）。\n\n` +
+    `確定繼續？`
+  );
+  if (!confirmed) return;
+
+  try {
+    const text = await file.text();
+    const records = JSON.parse(text);
+    if (!Array.isArray(records)) { alert("備份檔格式錯誤。"); return; }
+
+    const batchSize = 200;
+    let total = 0, errors = 0;
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      const { error } = await supabaseClient
+        .from("mediation_schedules")
+        .upsert(batch, { onConflict: "id" });
+      if (error) {
+        console.error("還原批次失敗:", error.message);
+        errors++;
+      } else {
+        total += batch.length;
+      }
+    }
+
+    await loadRemoteCases();
+    alert(`還原完成：${total} 筆成功${errors ? "，" + errors + " 批失敗" : ""}。`);
+  } catch (err) {
+    alert("還原失敗：" + err.message);
+  }
+}
+
+
 // 掃描 ws 所有 cell key，找出實際最大列號並修正範圍
 function fixSheetRef(ws) {
   const refMatch = (ws['!ref'] || 'A1').match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
