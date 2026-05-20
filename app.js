@@ -1,4 +1,4 @@
-console.log("app.js version: 20260519v");
+console.log("app.js version: 20260520a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -474,15 +474,40 @@ async function importAssocExcel(e) {
     }
 
     // 批量寫入 Supabase
+    const toDb = (item) => ({
+      id:                   item.id,
+      source_case_no:       item.sourceCaseNo || null,
+      case_no:              item.caseNo || null,
+      meeting_date:         item.meetingDate,
+      meeting_time:         item.meetingTime,
+      room:                 item.room,
+      room_other:           item.roomOther || null,
+      worker:               item.worker || null,
+      employer:             item.employer || null,
+      mediator:             item.mediator || null,
+      recorder:             item.recorder || null,
+      owner:                item.owner || null,
+      dispute_type:         item.disputeType || null,
+      report_category:      item.reportCategory || null,
+      worker_gender:        null,
+      worker_age:           null,
+      male_count:           0,
+      female_count:         0,
+      special_case_type:    item.specialCaseType || null,
+      mediation_method_code: item.mediationMethodCode || null,
+      status:               item.status,
+      notes:                item.notes || null,
+    });
+
     const batchSize = 100;
     let total = 0, errors = 0;
     for (let i = 0; i < newCases.length; i += batchSize) {
-      const batch = newCases.slice(i, i + batchSize);
+      const batch = newCases.slice(i, i + batchSize).map(toDb);
       const { error } = await supabaseClient
         .from("mediation_schedules")
-        .upsert(batch.map(toDbCase), { onConflict: "id" });
+        .upsert(batch, { onConflict: "id" });
       if (error) {
-        console.error("批次失敗:", error.message);
+        console.error("批次失敗:", error.message, error.details);
         errors++;
       } else {
         total += batch.length;
