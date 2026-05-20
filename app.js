@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520b");
+console.log("app.js version: 20260520c");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -524,10 +524,8 @@ async function importAssocExcel(e) {
       }
     }
 
-    // 更新本地 cases
-    cases.push(...newCases);
-    persist();
-    render();
+    // 重新從 Supabase 讀取確保資料同步
+    await loadRemoteCases();
 
     alert(`協會案件匯入完成：${total} 筆成功${errors ? "，" + errors + " 批失敗" : ""}。`);
   } catch (err) {
