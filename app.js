@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521d");
+console.log("app.js version: 20260521f");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -1828,7 +1828,10 @@ function openRoomReservationDialog() {
 
     document.getElementById("closeRoomDlg").addEventListener("click",  () => dlg.close());
     document.getElementById("cancelRoomDlg").addEventListener("click", () => dlg.close());
-    document.getElementById("roomDlgDate").addEventListener("change",  renderRoomDlgBody);
+    document.getElementById("roomDlgDate").addEventListener("change", () => {
+      renderRoomDlgWeekBtns();
+      renderRoomDlgBody();
+    });
     document.getElementById("saveRoomDlg").addEventListener("click",   saveRoomDlgSettings);
   }
 
@@ -1836,27 +1839,36 @@ function openRoomReservationDialog() {
   const defaultDate = toDateInputValue(selectedWeekStart);
   document.getElementById("roomDlgDate").value = defaultDate;
 
-  // 渲染本週快速跳日按鈕
-  const weekBtns = document.getElementById("roomDlgWeekBtns");
-  if (weekBtns) {
-    const dayNames = ["週一","週二","週三","週四","週五"];
-    weekBtns.innerHTML = dayNames.map((name, i) => {
-      const d    = addDays(selectedWeekStart, i);
-      const dVal = toDateInputValue(d);
-      const hasSettings = Object.keys(roomReservations).some(k => k.startsWith(dVal));
-      const dot  = hasSettings ? "🔵 " : "";
-      return `<button type="button"
-        style="font-size:12px;padding:3px 10px;border:1px solid #d1d5db;border-radius:5px;
-               background:#f9fafb;cursor:pointer;"
-        onclick="document.getElementById('roomDlgDate').value='${dVal}';renderRoomDlgBody()">
-        ${dot}${name} ${(d.getMonth()+1)}/${d.getDate()}
-      </button>`;
-    }).join("");
-  }
-
+  renderRoomDlgWeekBtns();
   renderRoomDlgBody();
   dlg.showModal();
 }
+
+function renderRoomDlgWeekBtns() {
+  const weekBtns = document.getElementById("roomDlgWeekBtns");
+  if (!weekBtns) return;
+
+  // 從目前日期欄的值推算所在週的週一
+  const dateVal = document.getElementById("roomDlgDate").value;
+  const baseDate = dateVal ? startOfWeek(parseDate(dateVal)) : selectedWeekStart;
+
+  const dayNames = ["週一","週二","週三","週四","週五"];
+  weekBtns.innerHTML = dayNames.map((name, i) => {
+    const d        = addDays(baseDate, i);
+    const dVal     = toDateInputValue(d);
+    const isActive = dVal === document.getElementById("roomDlgDate").value;
+    const hasSet   = Object.keys(roomReservations).some(k => k.startsWith(dVal));
+    const dot      = hasSet ? `<span style="color:#3b82f6;font-size:10px;">●</span> ` : "";
+    const activeSt = isActive
+      ? "background:#2563eb;color:#fff;border-color:#2563eb;"
+      : "background:#f9fafb;color:#374151;border-color:#d1d5db;";
+    return `<button type="button"
+      style="font-size:12px;padding:4px 11px;border:1px solid;border-radius:6px;
+             cursor:pointer;display:inline-flex;align-items:center;gap:3px;${activeSt}"
+      onclick="document.getElementById('roomDlgDate').value='${dVal}';renderRoomDlgWeekBtns();renderRoomDlgBody()">
+      ${dot}${name} ${(d.getMonth()+1)}/${d.getDate()}
+    </button>`;
+  }).join("");
 
 function renderRoomDlgBody() {
   const dateVal = document.getElementById("roomDlgDate").value;
@@ -1944,6 +1956,7 @@ async function saveRoomDlgSettings() {
 
   updateRoomSelect();
   render();
+  renderRoomDlgWeekBtns();
   document.getElementById("roomReservationDialog").close();
   alert(`${dateVal} 的可用會議室設定已儲存。`);
 }
