@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521f");
+console.log("app.js version: 20260521g");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -860,8 +860,10 @@ function createCaseCard(item, isConflict = false) {
   const isCommitteeType = item.reportCategory === "F";
   button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
   button.type = "button";
-  const specialTag = isSpecial ? `<small style="color:#dc2626;font-weight:700;">⚠ ${escapeHtml(item.specialCaseType)}</small>` : "";
-  const conflictTag = isConflict ? `<small style="color:#dc2626;font-weight:700;">⚠ 衝期</small>` : "";
+  // 衝期標示：橘色，放在 specialTag 前
+  const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
+  // 特殊案件：紅色字「特殊案件」固定顯示在最下方
+  const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
     : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
@@ -872,7 +874,7 @@ function createCaseCard(item, isConflict = false) {
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${specialTag}${conflictTag}
+    ${conflictTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
