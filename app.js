@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521b");
+console.log("app.js version: 20260521c");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -152,6 +152,7 @@ let selectedWeekStart = startOfWeek(new Date());
 const elements = {
   weekPicker: document.querySelector("#weekPicker"),
   keyword: document.querySelector("#keyword"),
+  searchField: document.querySelector("#searchField"),
   statusFilter: document.querySelector("#statusFilter"),
   calendar: document.querySelector("#calendar"),
   caseList: document.querySelector("#caseList"),
@@ -201,6 +202,7 @@ document.querySelector("#todayWeek").addEventListener("click", () => {
 });
 elements.keyword.addEventListener("input", render);
 elements.statusFilter.addEventListener("change", render);
+elements.searchField.addEventListener("change", render);
 elements.form.addEventListener("submit", saveCase);
 elements.deleteCase.addEventListener("click", deleteCurrentCase);
 
@@ -874,28 +876,48 @@ function createCell(text, className) {
 }
 
 function getFilteredCases() {
-  const weekEnd = addDays(selectedWeekStart, 4);
-  const keyword = elements.keyword.value.trim().toLowerCase();
-  const status = elements.statusFilter.value;
+  const weekEnd     = addDays(selectedWeekStart, 4);
+  const keyword     = elements.keyword.value.trim().toLowerCase();
+  const status      = elements.statusFilter.value;
+  const searchField = elements.searchField?.value || "all";
 
   return cases.filter((item) => {
-    const date = parseDate(item.meetingDate);
-    const inWeek = date >= selectedWeekStart && date <= weekEnd;
+    const date     = parseDate(item.meetingDate);
+    const inWeek   = date >= selectedWeekStart && date <= weekEnd;
     const inStatus = status === "all" || item.status === status;
-    const text = [
-      item.sourceCaseNo,
-      item.caseNo,
-      item.worker,
-      item.employer,
-      item.mediator,
-      item.recorder,
-      item.owner,
-      item.room,
-      item.notes,
-    ]
-      .join(" ")
-      .toLowerCase();
-    const inKeyword = !keyword || text.includes(keyword);
+
+    let inKeyword = true;
+    if (keyword) {
+      if (searchField === "all") {
+        // 全部欄位合併搜尋（同原本邏輯）
+        const text = [
+          item.sourceCaseNo,
+          item.caseNo,
+          item.worker,
+          item.employer,
+          item.mediator,
+          item.recorder,
+          item.owner,
+          item.room,
+          item.notes,
+        ].join(" ").toLowerCase();
+        inKeyword = text.includes(keyword);
+      } else {
+        // 指定欄位精準搜尋
+        const fieldMap = {
+          caseNo:   [item.sourceCaseNo, item.caseNo],
+          worker:   [item.worker],
+          employer: [item.employer],
+          mediator: [item.mediator, getMediatorDisplay(item)],
+          recorder: [item.recorder],   // 只搜紀錄，不含承辦人
+          owner:    [item.owner],      // 只搜承辦人，不含紀錄
+          notes:    [item.notes],
+        };
+        const targets = fieldMap[searchField] ?? [];
+        inKeyword = targets.some(t => (t || "").toLowerCase().includes(keyword));
+      }
+    }
+
     return inWeek && inStatus && inKeyword;
   });
 }
