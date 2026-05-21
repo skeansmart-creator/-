@@ -1869,6 +1869,7 @@ function renderRoomDlgWeekBtns() {
       ${dot}${name} ${(d.getMonth()+1)}/${d.getDate()}
     </button>`;
   }).join("");
+}
 
 function renderRoomDlgBody() {
   const dateVal = document.getElementById("roomDlgDate").value;
