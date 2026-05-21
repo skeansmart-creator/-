@@ -50,6 +50,7 @@
       <div class="header-actions">
         <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
         <button id="exportWeeklyReport" class="secondary-button" type="button">產出週報表</button>
+        <button id="setRooms" class="secondary-button" type="button">⚙ 設定可用會議室</button>
         <button id="backupData" class="secondary-button" type="button">備份資料</button>
         <input id="restoreInput" type="file" accept=".json" style="display:none" />
         <button id="restoreData" class="secondary-button" type="button">還原備份</button>
@@ -196,6 +197,7 @@
               <option>勞資爭議調解會議室</option>
               <option>其他</option>
             </select>
+            <small id="roomAvailHint" hidden style="color:#2563eb;font-weight:400;font-size:12px;margin-top:4px;display:block;"></small>
           </label>
           <label id="roomOtherLabel" hidden>
             其他地點
@@ -355,6 +357,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260520m"></script>
+    <script src="app.js?v=20260521a"></script>
   </body>
 </html>

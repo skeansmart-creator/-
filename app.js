@@ -1,4 +1,4 @@
-console.log("app.js version: 20260520l");
+console.log("app.js version: 20260521a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -143,6 +143,8 @@ const sampleCases = [
 
 let cases = loadCases();
 let intakeCases = [];
+// 會議室預約設定：{ "2026-06-16_morning": ["晤談室(一)","晤談室(三)"], ... }
+let roomReservations = {};
 
 let applicationBatchCases = [];
 let selectedWeekStart = startOfWeek(new Date());
@@ -180,6 +182,7 @@ document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
+document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
   selectedWeekStart = addDays(selectedWeekStart, -7);
@@ -204,6 +207,9 @@ elements.deleteCase.addEventListener("click", deleteCurrentCase);
 ["meetingDate", "meetingTime", "room", "mediator"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("change", updateConflictWarning);
 });
+// 日期/時間變動時同步更新可用會議室選單
+document.querySelector("#meetingDate").addEventListener("change", updateRoomSelect);
+document.querySelector("#meetingTime").addEventListener("change", updateRoomSelect);
 document.querySelector("#room").addEventListener("change", toggleOtherRoom);
 
 initialize();
@@ -211,6 +217,7 @@ initialize();
 function initialize() {
   elements.weekPicker.value = dateToWeekValue(selectedWeekStart);
   loadRemoteCases();
+  loadRoomReservations();
   renderIntakeList();
   render();
 }
@@ -676,12 +683,18 @@ function renderRoomUsage(weekDates, filtered) {
       rooms.forEach(room => {
         const items = lookup[room]?.[dateKey]?.[slot] || [];
         const { bg, text } = cellColor(items);
-        // 顯示調解人
-        const mediatorLabel = items.length === 0 ? "" :
+
+        // 檢查是否為不可用時段
+        const allowedRooms = getAllowedRooms(dateKey, slot);
+        const isUnavailable = allowedRooms !== null && !allowedRooms.has(room) && room !== "其他";
+        const cellBg   = isUnavailable && items.length === 0 ? "#f3f4f6" : bg;
+        const cellText = isUnavailable && items.length === 0 ? "#d1d5db" : text;
+
+        const mediatorLabel = items.length === 0 ? (isUnavailable ? "✕" : "") :
           items.length > 1 ? `⚠${items.length}筆` :
           (getMediatorDisplay(items[0]) || "●").slice(0, 4);
-        html += `<td style="padding:4px 6px;border:1px solid #e2e8f0;background:${bg};text-align:center;cursor:${items.length?'pointer':'default'};color:${text};"
-          title="${items.map(i=>`${i.worker}｜調解人：${getMediatorDisplay(i)}`).join('\n')}"
+        html += `<td style="padding:4px 6px;border:1px solid #e2e8f0;background:${cellBg};text-align:center;cursor:${items.length?'pointer':'default'};color:${cellText};"
+          title="${isUnavailable && !items.length ? '本時段未預約此會議室' : items.map(i=>`${i.worker}｜調解人：${getMediatorDisplay(i)}`).join('\n')}"
           onclick="${items.length ? `openCaseDialog('${items[0].id}')` : ''}">
           <span style="font-size:11px;">${escapeHtml(mediatorLabel)}</span>
         </td>`;
@@ -948,6 +961,7 @@ function openCaseDialog(id, intakeItem) {
 
   toggleOtherRoom();
   updateConflictWarning();
+  updateRoomSelect();
   elements.dialog.showModal();
 }
 
@@ -1643,6 +1657,189 @@ function buildIntakeNotes(item) {
   if (item.mediationLocation) parts.push(`原填地點：${item.mediationLocation}`);
   if (item.specialCaseType && item.specialCaseType !== "無") parts.push(`特殊案件：${item.specialCaseType}`);
   return parts.join("；");
+}
+
+// ══════════════════════════════════════════════════════════
+// 會議室預約管理
+// ══════════════════════════════════════════════════════════
+
+function dateToSession(timeStr) {
+  // "09:00" / "10:30" → "morning"；"13:30" / "15:00" → "afternoon"
+  const h = parseInt((timeStr || "09").split(":")[0]);
+  return h < 12 ? "morning" : "afternoon";
+}
+
+function reservationKey(date, session) {
+  return `${date}_${session}`;
+}
+
+function getAllowedRooms(date, timeStr) {
+  // 回傳該日該時段允許的房間 Set，若未設定則回傳 null（代表不限制）
+  const session = dateToSession(timeStr);
+  const key = reservationKey(date, session);
+  if (!(key in roomReservations)) return null;
+  return new Set(roomReservations[key]);
+}
+
+async function loadRoomReservations() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("room_reservations")
+    .select("date,session,rooms");
+  if (error) { console.warn("載入會議室預約失敗", error); return; }
+  roomReservations = {};
+  (data || []).forEach(row => {
+    const key = reservationKey(row.date, row.session);
+    roomReservations[key] = row.rooms || [];
+  });
+  // 更新會議室選單（若 dialog 已開啟）
+  updateRoomSelect();
+}
+
+async function saveRoomReservation(date, session, rooms) {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient
+    .from("room_reservations")
+    .upsert({ date, session, rooms, updated_at: new Date().toISOString() },
+             { onConflict: "date,session" });
+  if (error) alert(`儲存失敗：${error.message}`);
+}
+
+// 當日期或時間改變時，動態更新 dialog 內的會議室選單
+function updateRoomSelect() {
+  const dateVal = document.querySelector("#meetingDate")?.value;
+  const timeVal = document.querySelector("#meetingTime")?.value;
+  const roomSel = document.querySelector("#room");
+  if (!roomSel || !dateVal || !timeVal) return;
+
+  const allowed = getAllowedRooms(dateVal, timeVal);
+  const currentVal = roomSel.value;
+
+  Array.from(roomSel.options).forEach(opt => {
+    if (opt.value === "其他") { opt.disabled = false; return; }
+    if (allowed === null) {
+      opt.disabled = false;
+      opt.text = opt.value;
+    } else if (allowed.has(opt.value)) {
+      opt.disabled = false;
+      opt.text = opt.value;
+    } else {
+      opt.disabled = true;
+      opt.text = `${opt.value}（不可用）`;
+    }
+  });
+
+  // 若目前選的已被停用，自動換到第一個可用的
+  if (roomSel.options[roomSel.selectedIndex]?.disabled) {
+    const first = Array.from(roomSel.options).find(o => !o.disabled);
+    if (first) roomSel.value = first.value;
+    toggleOtherRoom();
+  }
+
+  // 顯示/隱藏提示
+  const hint = document.querySelector("#roomAvailHint");
+  if (hint) {
+    if (allowed === null) {
+      hint.textContent = "";
+      hint.hidden = true;
+    } else {
+      const names = [...allowed].join("、") || "（無）";
+      hint.textContent = `本時段可用：${names}`;
+      hint.hidden = false;
+    }
+  }
+}
+
+// ── 會議室預約設定 Dialog ──────────────────────────────────
+
+function openRoomReservationDialog() {
+  // 建立 dialog（首次呼叫）
+  let dlg = document.getElementById("roomReservationDialog");
+  if (!dlg) {
+    dlg = document.createElement("dialog");
+    dlg.id = "roomReservationDialog";
+    dlg.style.cssText = "min-width:520px;max-width:680px;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.18);";
+    dlg.innerHTML = `
+      <div style="padding:20px 24px 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <h2 style="margin:0;font-size:17px;">設定可用會議室</h2>
+          <button id="closeRoomDlg" type="button" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666;line-height:1;">×</button>
+        </div>
+        <div style="font-size:13px;color:#666;margin-bottom:16px;">
+          勾選後，排程人員在該時段只能選取勾選的會議室。<br>
+          若整天皆不設限，請保持全部勾選。
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <label style="font-size:13px;">選擇日期</label>
+          <input id="roomDlgDate" type="date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;" />
+        </div>
+        <div id="roomDlgBody" style="display:flex;flex-direction:column;gap:18px;"></div>
+      </div>
+      <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e5e7eb;margin-top:20px;">
+        <button id="cancelRoomDlg" type="button" class="secondary-button">取消</button>
+        <button id="saveRoomDlg"   type="button" class="primary-button">儲存設定</button>
+      </div>
+    `;
+    document.body.appendChild(dlg);
+
+    document.getElementById("closeRoomDlg").addEventListener("click",  () => dlg.close());
+    document.getElementById("cancelRoomDlg").addEventListener("click", () => dlg.close());
+    document.getElementById("roomDlgDate").addEventListener("change",  renderRoomDlgBody);
+    document.getElementById("saveRoomDlg").addEventListener("click",   saveRoomDlgSettings);
+  }
+
+  // 預設日期 = 本週一
+  const defaultDate = toDateInputValue(selectedWeekStart);
+  document.getElementById("roomDlgDate").value = defaultDate;
+  renderRoomDlgBody();
+  dlg.showModal();
+}
+
+function renderRoomDlgBody() {
+  const dateVal = document.getElementById("roomDlgDate").value;
+  const body    = document.getElementById("roomDlgBody");
+  if (!body || !dateVal) return;
+
+  const sessions = [
+    { key: "morning",   label: "上午（09:00 / 10:30）" },
+    { key: "afternoon", label: "下午（13:30 / 15:00）" },
+  ];
+
+  body.innerHTML = sessions.map(({ key, label }) => {
+    const resKey  = reservationKey(dateVal, key);
+    const saved   = roomReservations[resKey] ?? fixedRooms; // 預設全勾
+    const checkboxes = fixedRooms.map(room => {
+      const checked = saved.includes(room) ? "checked" : "";
+      return `<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" data-session="${key}" data-room="${room}" ${checked} style="width:15px;height:15px;">
+        ${room}
+      </label>`;
+    }).join("");
+    return `
+      <div>
+        <div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px;">${label}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 20px;">${checkboxes}</div>
+      </div>`;
+  }).join(`<hr style="border:none;border-top:1px solid #e5e7eb;">`);
+}
+
+async function saveRoomDlgSettings() {
+  const dateVal = document.getElementById("roomDlgDate").value;
+  if (!dateVal) { alert("請先選擇日期"); return; }
+
+  const sessions = ["morning", "afternoon"];
+  for (const session of sessions) {
+    const cbs = document.querySelectorAll(`#roomDlgBody input[data-session="${session}"]`);
+    const rooms = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.room);
+    const key = reservationKey(dateVal, session);
+    roomReservations[key] = rooms;
+    await saveRoomReservation(dateVal, session, rooms);
+  }
+
+  updateRoomSelect();
+  render(); // 刷新矩陣（讓不可用格子顯示標記）
+  document.getElementById("roomReservationDialog").close();
+  alert(`${dateVal} 的可用會議室設定已儲存。`);
 }
 
 async function backupData() {
