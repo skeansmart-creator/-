@@ -80,6 +80,10 @@
             <option value="notes">備註</option>
           </select>
         </label>
+        <label id="showEmptyLabel" hidden style="flex-direction:row;align-items:center;gap:6px;">
+          <input id="showEmpty" type="checkbox" style="width:15px;height:15px;" />
+          只顯示未填
+        </label>
         <label>
           狀態
           <select id="statusFilter">
@@ -370,6 +374,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260521c"></script>
+    <script src="app.js?v=20260521d"></script>
   </body>
 </html>
