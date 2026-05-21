@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521a");
+console.log("app.js version: 20260521b");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -1766,13 +1766,14 @@ function openRoomReservationDialog() {
           <button id="closeRoomDlg" type="button" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666;line-height:1;">×</button>
         </div>
         <div style="font-size:13px;color:#666;margin-bottom:16px;">
-          勾選後，排程人員在該時段只能選取勾選的會議室。<br>
+          勾選該時段可使用的會議室。取消勾選代表不可預約。<br>
           若整天皆不設限，請保持全部勾選。
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          <label style="font-size:13px;">選擇日期</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <label style="font-size:13px;font-weight:600;">選擇日期</label>
           <input id="roomDlgDate" type="date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;" />
         </div>
+        <div id="roomDlgWeekBtns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
         <div id="roomDlgBody" style="display:flex;flex-direction:column;gap:18px;"></div>
       </div>
       <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e5e7eb;margin-top:20px;">
@@ -1791,6 +1792,25 @@ function openRoomReservationDialog() {
   // 預設日期 = 本週一
   const defaultDate = toDateInputValue(selectedWeekStart);
   document.getElementById("roomDlgDate").value = defaultDate;
+
+  // 渲染本週快速跳日按鈕
+  const weekBtns = document.getElementById("roomDlgWeekBtns");
+  if (weekBtns) {
+    const dayNames = ["週一","週二","週三","週四","週五"];
+    weekBtns.innerHTML = dayNames.map((name, i) => {
+      const d    = addDays(selectedWeekStart, i);
+      const dVal = toDateInputValue(d);
+      const hasSettings = Object.keys(roomReservations).some(k => k.startsWith(dVal));
+      const dot  = hasSettings ? "🔵 " : "";
+      return `<button type="button"
+        style="font-size:12px;padding:3px 10px;border:1px solid #d1d5db;border-radius:5px;
+               background:#f9fafb;cursor:pointer;"
+        onclick="document.getElementById('roomDlgDate').value='${dVal}';renderRoomDlgBody()">
+        ${dot}${name} ${(d.getMonth()+1)}/${d.getDate()}
+      </button>`;
+    }).join("");
+  }
+
   renderRoomDlgBody();
   dlg.showModal();
 }
@@ -1806,21 +1826,57 @@ function renderRoomDlgBody() {
   ];
 
   body.innerHTML = sessions.map(({ key, label }) => {
-    const resKey  = reservationKey(dateVal, key);
-    const saved   = roomReservations[resKey] ?? fixedRooms; // 預設全勾
-    const checkboxes = fixedRooms.map(room => {
+    const resKey = reservationKey(dateVal, key);
+    const saved  = roomReservations[resKey] ?? fixedRooms; // 預設全勾
+
+    // 固定房間勾選框
+    const fixedCheckboxes = fixedRooms.map(room => {
       const checked = saved.includes(room) ? "checked" : "";
       return `<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
         <input type="checkbox" data-session="${key}" data-room="${room}" ${checked} style="width:15px;height:15px;">
         ${room}
       </label>`;
     }).join("");
+
+    // 已儲存的自訂房間（不在 fixedRooms 裡的）
+    const customSaved = saved.filter(r => !fixedRooms.includes(r));
+    const customRows  = customSaved.map(room => `
+      <div class="custom-room-row" style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+        <input type="checkbox" data-session="${key}" data-room="${room}" checked style="width:15px;height:15px;">
+        <input type="text" value="${room}" style="border:1px solid #d1d5db;border-radius:5px;padding:3px 7px;font-size:13px;width:160px;"
+          oninput="this.previousElementSibling.dataset.room=this.value">
+        <button type="button" onclick="this.closest('.custom-room-row').remove()"
+          style="background:none;border:none;color:#dc2626;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+      </div>`).join("");
+
     return `
-      <div>
+      <div data-session-block="${key}">
         <div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px;">${label}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px 20px;">${checkboxes}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 20px;">${fixedCheckboxes}</div>
+        <div class="custom-rooms-${key}">${customRows}</div>
+        <button type="button" onclick="addCustomRoom('${key}')"
+          style="margin-top:8px;background:none;border:1px dashed #9ca3af;border-radius:5px;
+                 padding:3px 10px;font-size:12px;color:#6b7280;cursor:pointer;">
+          ＋ 新增其他地點
+        </button>
       </div>`;
-  }).join(`<hr style="border:none;border-top:1px solid #e5e7eb;">`);
+  }).join(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:4px 0;">`);
+}
+
+function addCustomRoom(session) {
+  const container = document.querySelector(`.custom-rooms-${session}`);
+  if (!container) return;
+  const row = document.createElement("div");
+  row.className = "custom-room-row";
+  row.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:6px;";
+  row.innerHTML = `
+    <input type="checkbox" data-session="${session}" data-room="" checked style="width:15px;height:15px;">
+    <input type="text" placeholder="例：惠中601" style="border:1px solid #d1d5db;border-radius:5px;padding:3px 7px;font-size:13px;width:160px;"
+      oninput="this.previousElementSibling.dataset.room=this.value">
+    <button type="button" onclick="this.closest('.custom-room-row').remove()"
+      style="background:none;border:none;color:#dc2626;font-size:16px;cursor:pointer;line-height:1;">✕</button>`;
+  container.appendChild(row);
+  row.querySelector("input[type=text]").focus();
 }
 
 async function saveRoomDlgSettings() {
@@ -1829,15 +1885,22 @@ async function saveRoomDlgSettings() {
 
   const sessions = ["morning", "afternoon"];
   for (const session of sessions) {
-    const cbs = document.querySelectorAll(`#roomDlgBody input[data-session="${session}"]`);
-    const rooms = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.room);
+    // 取固定房間勾選
+    const fixedCbs = document.querySelectorAll(`#roomDlgBody input[type=checkbox][data-session="${session}"]`);
+    const rooms = Array.from(fixedCbs)
+      .filter(cb => cb.checked && cb.dataset.room)
+      .map(cb => cb.dataset.room.trim())
+      .filter(Boolean);
+
+    // 去除重複
+    const unique = [...new Set(rooms)];
     const key = reservationKey(dateVal, session);
-    roomReservations[key] = rooms;
-    await saveRoomReservation(dateVal, session, rooms);
+    roomReservations[key] = unique;
+    await saveRoomReservation(dateVal, session, unique);
   }
 
   updateRoomSelect();
-  render(); // 刷新矩陣（讓不可用格子顯示標記）
+  render();
   document.getElementById("roomReservationDialog").close();
   alert(`${dateVal} 的可用會議室設定已儲存。`);
 }
