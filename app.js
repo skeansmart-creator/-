@@ -1772,6 +1772,13 @@ async function saveRoomReservation(date, session, rooms) {
   if (error) alert(`儲存失敗：${error.message}`);
 }
 
+// 括號正規化：把全形 （） 和半形 () 統一成半形，方便比對
+function normalizeBrackets(str) {
+  return String(str || "")
+    .replace(/（/g, "(")
+    .replace(/）/g, ")");
+}
+
 // 當日期或時間改變時，動態更新 dialog 內的會議室選單
 function updateRoomSelect() {
   const dateVal = document.querySelector("#meetingDate")?.value;
@@ -1780,19 +1787,28 @@ function updateRoomSelect() {
   if (!roomSel || !dateVal || !timeVal) return;
 
   const allowed = getAllowedRooms(dateVal, timeVal);
-  const currentVal = roomSel.value;
+
+  // 將 allowed Set 轉成正規化（全/半形統一）後的 Set，避免括號格式不符
+  const allowedNorm = allowed
+    ? new Set([...allowed].map(r => normalizeBrackets(r)))
+    : null;
 
   Array.from(roomSel.options).forEach(opt => {
-    if (opt.value === "其他") { opt.disabled = false; return; }
-    if (allowed === null) {
+    // 記住原始文字（避免多次執行時累加「不可用」）
+    if (!opt.dataset.origText) opt.dataset.origText = opt.value;
+    const cleanText = opt.dataset.origText;
+
+    if (opt.value === "其他") { opt.disabled = false; opt.text = cleanText; return; }
+
+    if (allowedNorm === null) {
       opt.disabled = false;
-      opt.text = opt.value;
-    } else if (allowed.has(opt.value)) {
+      opt.text = cleanText;
+    } else if (allowedNorm.has(normalizeBrackets(opt.value))) {
       opt.disabled = false;
-      opt.text = opt.value;
+      opt.text = cleanText;
     } else {
       opt.disabled = true;
-      opt.text = `${opt.value}（不可用）`;
+      opt.text = `${cleanText}（不可用）`;
     }
   });
 
@@ -1806,7 +1822,7 @@ function updateRoomSelect() {
   // 顯示/隱藏提示
   const hint = document.querySelector("#roomAvailHint");
   if (hint) {
-    if (allowed === null) {
+    if (allowedNorm === null) {
       hint.textContent = "";
       hint.hidden = true;
     } else {
