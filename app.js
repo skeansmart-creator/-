@@ -1423,48 +1423,62 @@ function printRecorderSheet() {
   const lookup = {};
   rows.forEach(item => {
     const room = displayRoom(item);
-    if (!fixedRooms.includes(room)) return; // 其他地點略過
+    if (!fixedRooms.includes(room)) return;
     if (!lookup[room]) lookup[room] = {};
     if (!lookup[room][item.meetingDate]) lookup[room][item.meetingDate] = {};
     lookup[room][item.meetingDate][item.meetingTime] = item;
   });
+
+  // 只保留本週有案件的會議室
+  const activeRooms = fixedRooms.filter(room => {
+    if (!lookup[room]) return false;
+    return Object.values(lookup[room]).some(daySlots => Object.keys(daySlots).length > 0);
+  });
+
+  if (activeRooms.length === 0) {
+    alert("本週無需派紀錄的案件（H/F類型）");
+    return;
+  }
 
   const weekDates = Array.from({ length: 5 }, (_, i) => {
     const d = addDays(selectedWeekStart, i);
     return { iso: toDateInputValue(d), label: `${weekdayNames[i]}<br>${formatMonthDay(d)}` };
   });
 
-  // 每個會議室產出一張表
-  const tables = fixedRooms.map(room => {
+  const minguoStart = toMinguoDate(selectedWeekStart);
+  const minguoEnd   = toMinguoDate(weekEnd);
+
+  // 每間會議室產出獨立一頁（page-break-after）
+  const pages = activeRooms.map((room, roomIdx) => {
     const rows_html = timeSlots.map(slot => {
       const cells = weekDates.map(({ iso }) => {
         const item = lookup[room]?.[iso]?.[slot];
         if (!item) return `<td class="cell empty"></td>`;
+        const mediator = escapeHtml(getMediatorDisplay(item) || "");
         return `<td class="cell">
           <div class="case-no">${escapeHtml(item.caseId || "")}</div>
-          <div class="owner">${escapeHtml(item.owner || "")}</div>
-          <div class="recorder-box">紀錄：___________</div>
+          <div class="mediator">調解人：${mediator}</div>
+          <div class="owner">承辦：${escapeHtml(item.owner || "")}</div>
+          <div class="recorder-box">紀錄：___________________</div>
         </td>`;
       }).join("");
       return `<tr><td class="time-col">${slot}</td>${cells}</tr>`;
     }).join("");
 
     const head_cells = weekDates.map(d => `<th>${d.label}</th>`).join("");
+    const isLast = roomIdx === activeRooms.length - 1;
 
-    return `
-      <div class="room-block">
-        <h2>${escapeHtml(room)}</h2>
-        <table>
-          <thead>
-            <tr><th class="time-col">時段</th>${head_cells}</tr>
-          </thead>
-          <tbody>${rows_html}</tbody>
-        </table>
-      </div>`;
-  }).join("");
-
-  const minguoStart = toMinguoDate(selectedWeekStart);
-  const minguoEnd   = toMinguoDate(weekEnd);
+    return `<div class="page${isLast ? "" : " page-break"}">
+      <div class="page-title">勞資爭議調解紀錄分配表</div>
+      <div class="page-subtitle">${minguoStart} ～ ${minguoEnd}</div>
+      <h2>${escapeHtml(room)}</h2>
+      <table>
+        <thead><tr><th class="time-col">時段</th>${head_cells}</tr></thead>
+        <tbody>${rows_html}</tbody>
+      </table>
+    </div>`;
+  }).join("
+");
 
   const html = `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -1473,35 +1487,51 @@ function printRecorderSheet() {
 <title>紀錄分配表 ${minguoStart}-${minguoEnd}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Microsoft JhengHei", Arial, sans-serif; font-size: 12px; padding: 16px; }
-  .title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 4px; }
-  .subtitle { text-align: center; font-size: 12px; color: #555; margin-bottom: 20px; }
-  .room-block { margin-bottom: 28px; page-break-inside: avoid; }
-  h2 { font-size: 13px; font-weight: bold; background: #dde4ef; padding: 4px 8px;
-       border: 1px solid #aaa; border-bottom: none; }
-  table { width: 100%; border-collapse: collapse; }
+  body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #fff; }
+  .no-print { text-align: right; padding: 10px 16px; }
+  .no-print button { padding: 6px 18px; font-size: 13px; cursor: pointer; }
+
+  .page {
+    width: 277mm;      /* A4 橫式可用寬度 */
+    min-height: 190mm;
+    padding: 10mm 10mm 8mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .page-break { page-break-after: always; }
+  .page-title { text-align: center; font-size: 15px; font-weight: bold; margin-bottom: 2px; }
+  .page-subtitle { text-align: center; font-size: 11px; color: #555; margin-bottom: 6px; }
+  h2 {
+    font-size: 13px; font-weight: bold;
+    background: #dde4ef; padding: 4px 10px;
+    border: 1px solid #aaa; border-bottom: none;
+  }
+  table { width: 100%; border-collapse: collapse; flex: 1; }
   th, td { border: 1px solid #aaa; padding: 4px 6px; vertical-align: top; }
-  th { background: #eef1f7; text-align: center; font-size: 11px; }
-  .time-col { width: 56px; text-align: center; font-weight: bold; color: #444; }
-  .cell { height: 58px; }
-  .cell.empty { background: #f9f9f9; }
+  th { background: #eef1f7; text-align: center; font-size: 11px; white-space: nowrap; }
+  .time-col { width: 50px; text-align: center; font-weight: bold; font-size: 11px; color: #444; white-space: nowrap; }
+  .cell { height: 62px; }
+  .cell.empty { background: #f7f8fa; }
   .case-no { font-weight: bold; font-size: 12px; }
-  .owner { font-size: 11px; color: #333; margin-top: 2px; }
-  .recorder-box { font-size: 10px; color: #888; margin-top: 6px; border-top: 1px dashed #ccc; padding-top: 3px; }
+  .mediator { font-size: 11px; color: #1a56a0; margin-top: 2px; }
+  .owner { font-size: 11px; color: #444; margin-top: 1px; }
+  .recorder-box { font-size: 10px; color: #888; margin-top: 5px; border-top: 1px dashed #bbb; padding-top: 3px; }
+
   @media print {
-    body { padding: 8px; }
-    .room-block { page-break-inside: avoid; }
+    @page { size: A4 landscape; margin: 8mm; }
+    body { background: #fff; }
     .no-print { display: none; }
+    .page { width: 100%; padding: 0; }
+    .page-break { page-break-after: always; }
+    table { font-size: 11px; }
   }
 </style>
 </head>
 <body>
-  <div class="no-print" style="text-align:right;margin-bottom:12px;">
-    <button onclick="window.print()" style="padding:6px 18px;font-size:13px;cursor:pointer;">🖨 列印</button>
+  <div class="no-print">
+    <button onclick="window.print()">🖨 列印</button>
   </div>
-  <div class="title">勞資爭議調解紀錄分配表</div>
-  <div class="subtitle">${minguoStart} ～ ${minguoEnd}</div>
-  ${tables}
+  ${pages}
 </body>
 </html>`;
 
