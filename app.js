@@ -1534,13 +1534,31 @@ function tableHtml(rows) {
     .join("")}</table>`;
 }
 
+// 新版代碼（A/B/E/F/H/J/AH/EH/JH）→ 舊版統計 key 對應
+const reportCategoryCodeMap = {
+  "A":  "laborAssocCity",
+  "AH": "laborAssocCity",
+  "B":  "laborAssocCounty",
+  "BH": "laborAssocCounty",
+  "E":  "laborEmploymentAssoc",
+  "EH": "laborEmploymentAssoc",
+  "J":  "occupationalInjuryAssoc",
+  "JH": "occupationalInjuryAssoc",
+  "H":  "mediator",
+  "F":  "committee",
+  "I":  "arbitration",
+  "G":  "transfer",
+};
+
 function buildWeeklyCounts(rows) {
   const counts = Object.fromEntries(Object.keys(reportCategoryLabels).map((key) => [key, 0]));
   counts.male = 0;
   counts.female = 0;
   counts.middleAged = 0;
   rows.forEach((item) => {
-    const key = item.reportCategory || "mediator";
+    // 支援新版代碼（A/F/H…）及舊版字串（mediator/committee…）兩種格式
+    const raw = item.reportCategory || "mediator";
+    const key = reportCategoryCodeMap[raw.toUpperCase()] ?? raw;
     counts[key] = (counts[key] || 0) + 1;
     counts.male += toNumber(item.maleCount) || inferGenderCount(item.workerGender, "男");
     counts.female += toNumber(item.femaleCount) || inferGenderCount(item.workerGender, "女");
