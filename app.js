@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521g");
+console.log("app.js version: 20260525b");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -1477,8 +1477,7 @@ function printRecorderSheet() {
         <tbody>${rows_html}</tbody>
       </table>
     </div>`;
-  }).join("
-");
+  }).join("\n");
 
   const html = `<!DOCTYPE html>
 <html lang="zh-TW">
