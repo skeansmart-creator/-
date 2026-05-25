@@ -185,6 +185,7 @@ document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
+document.querySelector("#printRecorderSheet").addEventListener("click", printRecorderSheet);
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
@@ -1408,6 +1409,103 @@ async function exportWeeklyReport() {
 
   // ── 下載 ──────────────────────────────────────────────────
   XLSX.writeFile(wb, `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xlsx`);
+}
+
+function printRecorderSheet() {
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const rows = getFilteredCases().filter(item =>
+    !["withdrawn", "cancelled"].includes(item.status)
+  );
+
+  // 建立 room → date → timeSlot → case 的查找結構
+  const lookup = {};
+  rows.forEach(item => {
+    const room = displayRoom(item);
+    if (!fixedRooms.includes(room)) return; // 其他地點略過
+    if (!lookup[room]) lookup[room] = {};
+    if (!lookup[room][item.meetingDate]) lookup[room][item.meetingDate] = {};
+    lookup[room][item.meetingDate][item.meetingTime] = item;
+  });
+
+  const weekDates = Array.from({ length: 5 }, (_, i) => {
+    const d = addDays(selectedWeekStart, i);
+    return { iso: toDateInputValue(d), label: `${weekdayNames[i]}<br>${formatMonthDay(d)}` };
+  });
+
+  // 每個會議室產出一張表
+  const tables = fixedRooms.map(room => {
+    const rows_html = timeSlots.map(slot => {
+      const cells = weekDates.map(({ iso }) => {
+        const item = lookup[room]?.[iso]?.[slot];
+        if (!item) return `<td class="cell empty"></td>`;
+        return `<td class="cell">
+          <div class="case-no">${escapeHtml(item.caseId || "")}</div>
+          <div class="owner">${escapeHtml(item.owner || "")}</div>
+          <div class="recorder-box">紀錄：___________</div>
+        </td>`;
+      }).join("");
+      return `<tr><td class="time-col">${slot}</td>${cells}</tr>`;
+    }).join("");
+
+    const head_cells = weekDates.map(d => `<th>${d.label}</th>`).join("");
+
+    return `
+      <div class="room-block">
+        <h2>${escapeHtml(room)}</h2>
+        <table>
+          <thead>
+            <tr><th class="time-col">時段</th>${head_cells}</tr>
+          </thead>
+          <tbody>${rows_html}</tbody>
+        </table>
+      </div>`;
+  }).join("");
+
+  const minguoStart = toMinguoDate(selectedWeekStart);
+  const minguoEnd   = toMinguoDate(weekEnd);
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"/>
+<title>紀錄分配表 ${minguoStart}-${minguoEnd}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft JhengHei", Arial, sans-serif; font-size: 12px; padding: 16px; }
+  .title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+  .subtitle { text-align: center; font-size: 12px; color: #555; margin-bottom: 20px; }
+  .room-block { margin-bottom: 28px; page-break-inside: avoid; }
+  h2 { font-size: 13px; font-weight: bold; background: #dde4ef; padding: 4px 8px;
+       border: 1px solid #aaa; border-bottom: none; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #aaa; padding: 4px 6px; vertical-align: top; }
+  th { background: #eef1f7; text-align: center; font-size: 11px; }
+  .time-col { width: 56px; text-align: center; font-weight: bold; color: #444; }
+  .cell { height: 58px; }
+  .cell.empty { background: #f9f9f9; }
+  .case-no { font-weight: bold; font-size: 12px; }
+  .owner { font-size: 11px; color: #333; margin-top: 2px; }
+  .recorder-box { font-size: 10px; color: #888; margin-top: 6px; border-top: 1px dashed #ccc; padding-top: 3px; }
+  @media print {
+    body { padding: 8px; }
+    .room-block { page-break-inside: avoid; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="no-print" style="text-align:right;margin-bottom:12px;">
+    <button onclick="window.print()" style="padding:6px 18px;font-size:13px;cursor:pointer;">🖨 列印</button>
+  </div>
+  <div class="title">勞資爭議調解紀錄分配表</div>
+  <div class="subtitle">${minguoStart} ～ ${minguoEnd}</div>
+  ${tables}
+</body>
+</html>`;
+
+  const win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
 }
 
 function handleWeekChange(event) {
