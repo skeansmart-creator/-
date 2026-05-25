@@ -1,4 +1,4 @@
-console.log("app.js version: 20260525b");
+console.log("app.js version: 20260525c");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -1498,23 +1498,23 @@ function printRecorderSheet() {
     flex-direction: column;
   }
   .page-break { page-break-after: always; }
-  .page-title { text-align: center; font-size: 15px; font-weight: bold; margin-bottom: 2px; }
-  .page-subtitle { text-align: center; font-size: 11px; color: #555; margin-bottom: 6px; }
+  .page-title { text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 3px; }
+  .page-subtitle { text-align: center; font-size: 14px; color: #222; margin-bottom: 8px; }
   h2 {
-    font-size: 13px; font-weight: bold;
-    background: #dde4ef; padding: 4px 10px;
-    border: 1px solid #aaa; border-bottom: none;
+    font-size: 16px; font-weight: bold;
+    background: #c8d4e8; padding: 6px 10px;
+    border: 2px solid #555; border-bottom: none;
   }
   table { width: 100%; border-collapse: collapse; flex: 1; }
-  th, td { border: 1px solid #aaa; padding: 4px 6px; vertical-align: top; }
-  th { background: #eef1f7; text-align: center; font-size: 11px; white-space: nowrap; }
-  .time-col { width: 50px; text-align: center; font-weight: bold; font-size: 11px; color: #444; white-space: nowrap; }
-  .cell { height: 62px; }
-  .cell.empty { background: #f7f8fa; }
-  .case-no { font-weight: bold; font-size: 12px; }
-  .mediator { font-size: 11px; color: #1a56a0; margin-top: 2px; }
-  .owner { font-size: 11px; color: #444; margin-top: 1px; }
-  .recorder-box { font-size: 10px; color: #888; margin-top: 5px; border-top: 1px dashed #bbb; padding-top: 3px; }
+  th, td { border: 2px solid #555; padding: 6px 8px; vertical-align: top; }
+  th { background: #dde4ef; text-align: center; font-size: 14px; font-weight: bold; white-space: nowrap; color: #111; }
+  .time-col { width: 58px; text-align: center; font-weight: bold; font-size: 14px; color: #111; white-space: nowrap; }
+  .cell { height: 72px; }
+  .cell.empty { background: #f0f0f0; }
+  .case-no { font-weight: bold; font-size: 15px; color: #000; }
+  .mediator { font-size: 14px; color: #003399; font-weight: bold; margin-top: 3px; }
+  .owner { font-size: 13px; color: #111; margin-top: 2px; }
+  .recorder-box { font-size: 12px; color: #333; font-weight: bold; margin-top: 6px; border-top: 2px solid #999; padding-top: 4px; }
 
   @media print {
     @page { size: A4 landscape; margin: 8mm; }
@@ -1522,7 +1522,7 @@ function printRecorderSheet() {
     .no-print { display: none; }
     .page { width: 100%; padding: 0; }
     .page-break { page-break-after: always; }
-    table { font-size: 11px; }
+    table { font-size: 13px; }
   }
 </style>
 </head>
