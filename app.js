@@ -1413,8 +1413,10 @@ async function exportWeeklyReport() {
 
 function printRecorderSheet() {
   const weekEnd = addDays(selectedWeekStart, 4);
+  const RECORDER_CATEGORIES = new Set(["H", "F", "mediator", "committee"]);
   const rows = getFilteredCases().filter(item =>
-    !["withdrawn", "cancelled"].includes(item.status)
+    !["withdrawn", "cancelled"].includes(item.status) &&
+    RECORDER_CATEGORIES.has(item.reportCategory)
   );
 
   // 建立 room → date → timeSlot → case 的查找結構
