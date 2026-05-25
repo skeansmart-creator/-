@@ -1323,7 +1323,7 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-function exportWeeklyReport() {
+async function exportWeeklyReport() {
   // 地點排序
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
   const weekRoomRank = (item) => {
@@ -1343,67 +1343,71 @@ function exportWeeklyReport() {
     });
 
   const weekEnd = addDays(selectedWeekStart, 4);
-  const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
-  const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
-  const detailRows = rows.map((item) => [
+
+  // ── 用 SheetJS 產出真正的 .xlsx ──────────────────────────
+  const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+
+  const wb = XLSX.utils.book_new();
+
+  // ── 工作表一：明細表 ──────────────────────────────────────
+  const detailHeader = ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"];
+  const detailData = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
-    item.meetingTime,  // 直接使用 HH:MM 格式
+    item.meetingTime,
     ["withdrawn", "cancelled"].includes(item.status) ? statusLabels[item.status] : item.worker,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.employer,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
     item.owner,
     getMediatorDisplay(item),
     item.recorder,
-    item.notes,
+    item.notes ?? "",
   ]);
 
-  const detailTable = tableHtml([
-    ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
-    ...detailRows,
-  ]);
-  const countTable = tableHtml([
-    ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
-    [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
-  ]);
+  // 標題列（合併）+ 資料
+  const titleRow = [`勞資爭議調解(仲裁)會議週報表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${rows.length} 件`];
+  const ws1Data  = [titleRow, detailHeader, ...detailData];
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
 
-  const html = `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: "Microsoft JhengHei", Arial, sans-serif; }
-          h1 { text-align: center; font-size: 20px; }
-          .meta { display: flex; justify-content: space-between; margin: 8px 0 12px; }
-          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-          th, td { border: 1px solid #333; padding: 6px; font-size: 12px; vertical-align: middle; }
-          th { background: #e8eef5; font-weight: 700; text-align: center; }
-          .count-title { font-weight: 700; margin-top: 20px; }
-        </style>
-      </head>
-      <body>
-        <h1>勞資爭議調解(仲裁)會議週報表</h1>
-        <div class="meta">
-          <span>日期：${escapeHtml(reportTitle)}</span>
-          <span>案件數：共${rows.length}件</span>
-          <span>本週派案人員：${escapeHtml(dispatcher)}</span>
-        </div>
-        ${detailTable}
-        <div class="count-title">件數統計</div>
-        ${countTable}
-      </body>
-    </html>
-  `;
+  // 合併標題列（A1 跨到最後一欄）
+  ws1["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: detailHeader.length - 1 } }];
 
-  const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
-  link.click();
-  URL.revokeObjectURL(url);
+  // 欄寬
+  ws1["!cols"] = [
+    { wch: 14 }, // 開會日期
+    { wch: 6  }, // 星期
+    { wch: 16 }, // 地點
+    { wch: 8  }, // 開會時間
+    { wch: 14 }, // 勞方
+    { wch: 18 }, // 資方
+    { wch: 12 }, // 主要爭議
+    { wch: 8  }, // 承辦人
+    { wch: 18 }, // 調解人
+    { wch: 8  }, // 紀錄
+    { wch: 24 }, // 備註
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws1, "週報明細");
+
+  // ── 工作表二：件數統計 ─────────────────────────────────────
+  const countHeader = ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區",
+    "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會",
+    "本局召開案件數", "男", "女", "中高齡"];
+  const countRow = [
+    `${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`,
+    counts.mediator, counts.committee, counts.arbitration, counts.transfer,
+    counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc,
+    counts.occupationalInjuryAssoc, counts.bureau,
+    counts.male, counts.female, counts.middleAged,
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet([countHeader, countRow]);
+  ws2["!cols"] = countHeader.map((h, i) => ({ wch: i === 0 ? 28 : 10 }));
+  XLSX.utils.book_append_sheet(wb, ws2, "件數統計");
+
+  // ── 下載 ──────────────────────────────────────────────────
+  XLSX.writeFile(wb, `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xlsx`);
 }
 
 function handleWeekChange(event) {
