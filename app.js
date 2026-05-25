@@ -1,4 +1,4 @@
-console.log("app.js version: 20260525c");
+console.log("app.js version: 20260525d");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -186,6 +186,26 @@ document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
 document.querySelector("#printRecorderSheet").addEventListener("click", printRecorderSheet);
+// ── Header dropdown toggle ──────────────────────────────
+document.querySelectorAll(".hdr-drop-btn").forEach(btn => {
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    const dd = btn.closest(".hdr-dropdown");
+    const isOpen = dd.classList.contains("open");
+    // 關閉其他所有
+    document.querySelectorAll(".hdr-dropdown.open").forEach(d => d.classList.remove("open"));
+    if (!isOpen) dd.classList.add("open");
+  });
+});
+document.querySelectorAll(".hdr-drop-menu button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    btn.closest(".hdr-dropdown")?.classList.remove("open");
+  });
+});
+document.addEventListener("click", () => {
+  document.querySelectorAll(".hdr-dropdown.open").forEach(d => d.classList.remove("open"));
+});
+
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
