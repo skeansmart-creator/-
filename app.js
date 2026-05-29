@@ -185,6 +185,7 @@ document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
+document.querySelector("#printRecorderSheet").addEventListener("click", printRecorderSheet);
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
@@ -1516,6 +1517,168 @@ function exportWeeklyReport() {
   link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function printRecorderSheet() {
+  const printableRows = getFilteredCases()
+    .filter((item) => !["withdrawn", "cancelled", "reserved"].includes(item.status))
+    .sort((a, b) => {
+      const dateCompare = String(a.meetingDate).localeCompare(String(b.meetingDate));
+      if (dateCompare !== 0) return dateCompare;
+      const timeCompare = String(a.meetingTime).localeCompare(String(b.meetingTime));
+      if (timeCompare !== 0) return timeCompare;
+      return String(displayRoom(a)).localeCompare(String(displayRoom(b)), "zh-Hant");
+    });
+
+  const grouped = printableRows.reduce((map, item) => {
+    const recorder = String(item.recorder || "未指定").trim() || "未指定";
+    if (!map[recorder]) map[recorder] = [];
+    map[recorder].push(item);
+    return map;
+  }, {});
+
+  const recorders = Object.keys(grouped).sort((a, b) => {
+    if (a === "未指定") return 1;
+    if (b === "未指定") return -1;
+    return a.localeCompare(b, "zh-Hant");
+  });
+
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const period = `${formatDate(selectedWeekStart)} 至 ${formatDate(weekEnd)}`;
+  const groupedHtml = recorders.length
+    ? recorders.map((recorder) => {
+        const rows = grouped[recorder].map((item, index) => [
+          index + 1,
+          formatDate(parseDate(item.meetingDate)),
+          getWeekdayName(parseDate(item.meetingDate)),
+          item.meetingTime,
+          displayRoom(item),
+          item.caseNo,
+          item.worker,
+          item.employer,
+          item.disputeType,
+          getMediatorDisplay(item),
+          item.owner,
+          statusLabels[item.status] || item.status,
+          item.notes,
+        ]);
+        return `
+          <section class="recorder-block">
+            <h2>${escapeHtml(recorder)} <span>共 ${grouped[recorder].length} 件</span></h2>
+            ${tableHtml([
+              ["序", "日期", "星期", "時間", "地點", "案號", "勞方", "資方", "主要爭議", "調解人", "承辦人", "狀態", "備註"],
+              ...rows,
+            ])}
+          </section>
+        `;
+      }).join("")
+    : `<p class="empty-print">本週沒有可列印的記錄分配資料。</p>`;
+
+  const html = `
+    <!doctype html>
+    <html lang="zh-Hant">
+      <head>
+        <meta charset="utf-8" />
+        <title>記錄分配表</title>
+        <style>
+          body {
+            margin: 18px;
+            color: #111827;
+            font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+          }
+          h1 {
+            margin: 0;
+            text-align: center;
+            font-size: 22px;
+            letter-spacing: 0;
+          }
+          .meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 10px 0 16px;
+            font-size: 13px;
+            color: #475569;
+          }
+          .recorder-block {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin: 0 0 18px;
+          }
+          h2 {
+            margin: 14px 0 6px;
+            padding: 7px 10px;
+            border-left: 5px solid #2563eb;
+            background: #e8eef5;
+            font-size: 15px;
+          }
+          h2 span {
+            margin-left: 10px;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+          }
+          th,
+          td {
+            border: 1px solid #334155;
+            padding: 5px 6px;
+            font-size: 11px;
+            vertical-align: top;
+          }
+          th {
+            background: #f1f5f9;
+            text-align: center;
+            font-weight: 700;
+          }
+          td:nth-child(1),
+          td:nth-child(3),
+          td:nth-child(4),
+          td:nth-child(5),
+          td:nth-child(12) {
+            text-align: center;
+            white-space: nowrap;
+          }
+          .empty-print {
+            margin-top: 24px;
+            text-align: center;
+            color: #64748b;
+          }
+          @media print {
+            body { margin: 10mm; }
+            .recorder-block { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>記錄分配表</h1>
+        <div class="meta">
+          <span>期間：${escapeHtml(period)}</span>
+          <span>案件數：${printableRows.length} 件</span>
+          <span>記錄人員：${recorders.filter((name) => name !== "未指定").length} 人</span>
+        </div>
+        ${groupedHtml}
+      </body>
+    </html>
+  `;
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("瀏覽器阻擋了列印視窗，請允許此網站開啟彈出視窗後再試一次。");
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.setTimeout(() => {
+    printWindow.print();
+  }, 250);
 }
 
 function handleWeekChange(event) {
