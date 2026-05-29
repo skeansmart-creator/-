@@ -1347,7 +1347,7 @@ function exportWeeklyReport() {
   const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
 
-  // ── 主要排程明細（所有案件）──────────────────────────────
+  // ── 一、排程明細 ──────────────────────────────────────────
   const detailRows = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
@@ -1361,19 +1361,18 @@ function exportWeeklyReport() {
     item.recorder,
     item.notes,
   ]);
-
   const detailTable = tableHtml([
     ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
     ...detailRows,
   ]);
 
-  // ── 件數統計 ─────────────────────────────────────────────
+  // ── 二、件數統計 ──────────────────────────────────────────
   const countTable = tableHtml([
     ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
     [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
   ]);
 
-  // ── 記錄分配表：依紀錄人員分組 ───────────────────────────
+  // ── 三、紀錄分配表 ────────────────────────────────────────
   const activeRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
   const recorderMap = {};
   activeRows.forEach(item => {
@@ -1389,7 +1388,7 @@ function exportWeeklyReport() {
 
   let recorderTableHtml = "";
   if (sortedRecorders.length === 0) {
-    recorderTableHtml = `<p style="color:#666;font-size:13px;">本週無有效案件。</p>`;
+    recorderTableHtml = "<p>本週無有效案件。</p>";
   } else {
     sortedRecorders.forEach(rec => {
       const items = recorderMap[rec];
@@ -1408,29 +1407,24 @@ function exportWeeklyReport() {
         item.notes,
       ]);
       const recTable = tableHtml([
-        ["開會日期","星期","開會時間","地點","案號","勞方","資方","主要爭議","調解人","承辦人","狀態","備註"],
+        ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "調解人", "承辦人", "狀態", "備註"],
         ...recRows,
       ]);
       recorderTableHtml +=
-        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;' +
-        'padding:4px 10px;background:#dbeafe;border-left:4px solid #2563eb;border-radius:3px;">' +
-        '紀錄：' + escapeHtml(rec) + '　（共 ' + items.length + ' 件）' +
-        '</div>' + recTable;
+        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;padding:4px 10px;background:#dbeafe;border-left:4px solid #2563eb;border-radius:3px;">' +
+        "紀錄：" + escapeHtml(rec) + "　（共 " + items.length + " 件）" +
+        "</div>" + recTable;
     });
   }
 
-  // ── 其他地點排程 ─────────────────────────────────────────
+  // ── 四、其他地點排程 ──────────────────────────────────────
   const fixedRoomSet = new Set(fixedRooms);
-  const otherRoomRows = rows.filter(item => {
-    const r = displayRoom(item);
-    return !fixedRoomSet.has(r);
-  });
+  const otherRoomRows = rows.filter(item => !fixedRoomSet.has(displayRoom(item)));
 
   let otherRoomHtml = "";
   if (otherRoomRows.length === 0) {
-    otherRoomHtml = `<p style="color:#666;font-size:13px;">本週無其他地點排程。</p>`;
+    otherRoomHtml = "<p>本週無其他地點排程。</p>";
   } else {
-    // 依地點再分組
     const otherByRoom = {};
     otherRoomRows.forEach(item => {
       const r = displayRoom(item);
@@ -1454,14 +1448,13 @@ function exportWeeklyReport() {
         item.notes,
       ]);
       const oTable = tableHtml([
-        ["開會日期","星期","開會時間","案號","勞方","資方","主要爭議","承辦人","調解人","紀錄","狀態","備註"],
+        ["開會日期", "星期", "開會時間", "案號", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "狀態", "備註"],
         ...oRows,
       ]);
       otherRoomHtml +=
-        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;' +
-        'padding:4px 10px;background:#fef9c3;border-left:4px solid #ca8a04;border-radius:3px;">' +
-        '地點：' + escapeHtml(room) + '　（共 ' + items.length + ' 件）' +
-        '</div>' + oTable;
+        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;padding:4px 10px;background:#fef9c3;border-left:4px solid #ca8a04;border-radius:3px;">' +
+        "地點：" + escapeHtml(room) + "　（共 " + items.length + " 件）" +
+        "</div>" + oTable;
     });
   }
 
@@ -1472,10 +1465,8 @@ function exportWeeklyReport() {
         <style>
           body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 20px; }
           h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
-          h2 { font-size: 15px; margin: 24px 0 8px; padding: 5px 12px;
-               background: #e8eef5; border-left: 5px solid #2563eb; }
-          .meta { display: flex; justify-content: space-between; margin: 8px 0 16px;
-                  font-size: 12px; color: #444; }
+          h2 { font-size: 15px; margin: 24px 0 8px; padding: 5px 12px; background: #e8eef5; border-left: 5px solid #2563eb; }
+          .meta { display: flex; justify-content: space-between; margin: 8px 0 16px; font-size: 12px; color: #444; }
           table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
           th, td { border: 1px solid #333; padding: 5px 6px; font-size: 12px; vertical-align: middle; }
           th { background: #e8eef5; font-weight: 700; text-align: center; }
@@ -1491,17 +1482,13 @@ function exportWeeklyReport() {
           <span>案件數：共 ${rows.length} 件（有效 ${activeRows.length} 件）</span>
           <span>本週派案人員：${escapeHtml(dispatcher)}</span>
         </div>
-
         <h2>一、本週排程明細</h2>
         ${detailTable}
-
         <h2>二、件數統計</h2>
         ${countTable}
-
         <h2 class="page-break">三、紀錄人員分配表</h2>
         <p class="section-note">依紀錄人員分組，排除撤回/取消案件，共 ${activeRows.length} 件，分配給 ${sortedRecorders.filter(r => r !== "（未指定）").length} 位紀錄人員。</p>
         ${recorderTableHtml}
-
         <h2 class="page-break">四、其他地點排程</h2>
         <p class="section-note">本週於固定晤談室以外地點舉辦之調解，共 ${otherRoomRows.length} 件。</p>
         ${otherRoomHtml}
