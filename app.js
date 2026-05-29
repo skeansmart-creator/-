@@ -900,10 +900,9 @@ function createCaseCard(item, isConflict = false) {
     isAssocType     ? "assoc-type"      : "",
   ].filter(Boolean).join(" ");
   button.type = "button";
-  // 衝期標示：橘色，放在 specialTag 前
-  const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
-  // 特殊案件：紅色字「特殊案件」固定顯示在最下方
-  const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
+  const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
+  const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
+  const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:700;">協會案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
     : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
@@ -914,7 +913,7 @@ function createCaseCard(item, isConflict = false) {
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${conflictTag}${specialTag}
+    ${conflictTag}${assocTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
