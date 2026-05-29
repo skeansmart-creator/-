@@ -39,50 +39,6 @@
         border-left: 4px solid #7c3aed !important;
         background: #fdf4ff !important;
       }
-
-      /* ── Header dropdown ── */
-      .hdr-dropdown {
-        position: relative;
-        display: inline-block;
-      }
-      .hdr-drop-btn {
-        white-space: nowrap;
-      }
-      .hdr-drop-menu {
-        display: none;
-        position: absolute;
-        top: calc(100% + 4px);
-        right: 0;
-        min-width: 180px;
-        background: #fff;
-        border: 1px solid #c9d3e0;
-        border-radius: 8px;
-        box-shadow: 0 6px 20px rgba(0,0,0,.13);
-        z-index: 999;
-        overflow: hidden;
-      }
-      .hdr-drop-menu button {
-        display: block;
-        width: 100%;
-        padding: 10px 16px;
-        text-align: left;
-        background: none;
-        border: none;
-        font-size: 14px;
-        color: #1e293b;
-        cursor: pointer;
-        white-space: nowrap;
-      }
-      .hdr-drop-menu button:hover {
-        background: #f0f4fa;
-      }
-      .hdr-drop-menu button + button {
-        border-top: 1px solid #e8edf3;
-      }
-      .hdr-dropdown:focus-within .hdr-drop-menu,
-      .hdr-dropdown.open .hdr-drop-menu {
-        display: block;
-      }
     </style>
   </head>
   <body>
@@ -91,45 +47,16 @@
         <p class="eyebrow">勞資爭議調解</p>
         <h1>會議排程管理</h1>
       </div>
-      <!-- 隱藏的 file inputs（保留原 id，JS 不需改） -->
-      <input id="restoreInput" type="file" accept=".json" style="display:none" />
-      <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
-
       <div class="header-actions">
-
-        <!-- 排程作業 -->
-        <div class="hdr-dropdown">
-          <button class="secondary-button hdr-drop-btn" type="button">排程作業 ▾</button>
-          <div class="hdr-drop-menu">
-            <button id="importAssocBtn" type="button">協會匯入案件 Excel</button>
-          </div>
-        </div>
-
-        <!-- 列印作業 -->
-        <div class="hdr-dropdown">
-          <button class="secondary-button hdr-drop-btn" type="button">列印作業 ▾</button>
-          <div class="hdr-drop-menu">
-            <button id="exportCsv" type="button">匯出報表</button>
-            <button id="exportWeeklyReport" type="button">產出週報表</button>
-            <button id="printRecorderSheet" type="button">列印紀錄分配表</button>
-          </div>
-        </div>
-
-        <!-- 備份作業 -->
-        <div class="hdr-dropdown">
-          <button class="secondary-button hdr-drop-btn" type="button">備份作業 ▾</button>
-          <div class="hdr-drop-menu">
-            <button id="backupData" type="button">備份資料</button>
-            <button id="restoreData" type="button">還原備份</button>
-          </div>
-        </div>
-
-        <!-- 會議室預約 -->
-        <button id="setRooms" class="secondary-button" type="button">會議室預約</button>
-
-        <!-- 新增排程 -->
+        <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
+        <button id="exportWeeklyReport" class="secondary-button" type="button">產出週報表</button>
+        <button id="setRooms" class="secondary-button" type="button">⚙ 設定可用會議室</button>
+        <button id="backupData" class="secondary-button" type="button">備份資料</button>
+        <input id="restoreInput" type="file" accept=".json" style="display:none" />
+        <button id="restoreData" class="secondary-button" type="button">還原備份</button>
+        <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
+        <button id="importAssocBtn" class="secondary-button" type="button">協會匯入案件 Excel</button>
         <button id="newCase" class="primary-button" type="button">新增排程</button>
-
       </div>
     </header>
 
@@ -449,6 +376,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260521g"></script>
+    <script src="app.js?v=20260529a"></script>
   </body>
 </html>

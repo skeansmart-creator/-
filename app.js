@@ -1,4 +1,4 @@
-console.log("app.js version: 20260521g");
+console.log("app.js version: 20260529a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
