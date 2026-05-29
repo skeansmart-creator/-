@@ -1610,11 +1610,14 @@ function _doPrintRecorderSheet(selectedRooms, lookup, weekDates, weekEnd, fixedR
         if (!items.length) return `<td></td>`;
         const cells = items.map(item => {
           const mediator = getMediatorDisplay(item) || "";
+          const recorder = (item.recorder || "").trim();
           return [
             `<div class="c-caseno">${escapeHtml(item.caseNo)}</div>`,
             mediator ? `<div class="c-mediator">${escapeHtml(mediator)}</div>` : "",
             `<div class="c-owner">${escapeHtml(item.owner)}</div>`,
-            `<div class="c-recorder">紀錄：<span class="fill-line"></span></div>`,
+            recorder
+              ? `<div class="c-recorder">紀錄：<span class="c-recorder-name">${escapeHtml(recorder)}</span></div>`
+              : `<div class="c-recorder">紀錄：<span class="fill-line"></span></div>`,
           ].join("");
         }).join('<hr class="item-sep">');
         return `<td>${cells}</td>`;
@@ -1657,6 +1660,7 @@ function _doPrintRecorderSheet(selectedRooms, lookup, weekDates, weekEnd, fixedR
     .c-mediator { font-size: 14px; font-weight: 700; color: #003399; margin-bottom: 2px; }
     .c-owner    { font-size: 13px; font-weight: 700; color: #111; margin-bottom: 4px; }
     .c-recorder { font-size: 12px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 4px; }
+    .c-recorder-name { font-size: 13px; font-weight: 700; color: #000; text-decoration: underline; }
     .fill-line  { flex: 1; border-bottom: 2px solid #333; display: inline-block; min-width: 60px; }
     .item-sep   { border: none; border-top: 1px dashed #aaa; margin: 3px 0; }
     td { min-height: 60px; }
