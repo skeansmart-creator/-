@@ -1,4 +1,4 @@
-console.log("app.js version: 20260525d");
+console.log("app.js version: 20260521g");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -185,27 +185,6 @@ document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
-document.querySelector("#printRecorderSheet").addEventListener("click", printRecorderSheet);
-// ── Header dropdown toggle ──────────────────────────────
-document.querySelectorAll(".hdr-drop-btn").forEach(btn => {
-  btn.addEventListener("click", e => {
-    e.stopPropagation();
-    const dd = btn.closest(".hdr-dropdown");
-    const isOpen = dd.classList.contains("open");
-    // 關閉其他所有
-    document.querySelectorAll(".hdr-dropdown.open").forEach(d => d.classList.remove("open"));
-    if (!isOpen) dd.classList.add("open");
-  });
-});
-document.querySelectorAll(".hdr-drop-menu button").forEach(btn => {
-  btn.addEventListener("click", () => {
-    btn.closest(".hdr-dropdown")?.classList.remove("open");
-  });
-});
-document.addEventListener("click", () => {
-  document.querySelectorAll(".hdr-dropdown.open").forEach(d => d.classList.remove("open"));
-});
-
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
@@ -1344,7 +1323,7 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-async function exportWeeklyReport() {
+function exportWeeklyReport() {
   // 地點排序
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
   const weekRoomRank = (item) => {
@@ -1364,16 +1343,12 @@ async function exportWeeklyReport() {
     });
 
   const weekEnd = addDays(selectedWeekStart, 4);
+  const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
+  const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
 
-  // ── 用 SheetJS 產出真正的 .xlsx ──────────────────────────
-  const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
-
-  const wb = XLSX.utils.book_new();
-
-  // ── 工作表一：明細表 ──────────────────────────────────────
-  const detailHeader = ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"];
-  const detailData = rows.map((item) => [
+  // ── 主要排程明細（所有案件）──────────────────────────────
+  const detailRows = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
@@ -1384,179 +1359,163 @@ async function exportWeeklyReport() {
     item.owner,
     getMediatorDisplay(item),
     item.recorder,
-    item.notes ?? "",
+    item.notes,
   ]);
 
-  // 標題列（合併）+ 資料
-  const titleRow = [`勞資爭議調解(仲裁)會議週報表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${rows.length} 件`];
-  const ws1Data  = [titleRow, detailHeader, ...detailData];
-  const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+  const detailTable = tableHtml([
+    ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
+    ...detailRows,
+  ]);
 
-  // 合併標題列（A1 跨到最後一欄）
-  ws1["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: detailHeader.length - 1 } }];
+  // ── 件數統計 ─────────────────────────────────────────────
+  const countTable = tableHtml([
+    ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
+    [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
+  ]);
 
-  // 欄寬
-  ws1["!cols"] = [
-    { wch: 14 }, // 開會日期
-    { wch: 6  }, // 星期
-    { wch: 16 }, // 地點
-    { wch: 8  }, // 開會時間
-    { wch: 14 }, // 勞方
-    { wch: 18 }, // 資方
-    { wch: 12 }, // 主要爭議
-    { wch: 8  }, // 承辦人
-    { wch: 18 }, // 調解人
-    { wch: 8  }, // 紀錄
-    { wch: 24 }, // 備註
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws1, "週報明細");
-
-  // ── 工作表二：件數統計 ─────────────────────────────────────
-  const countHeader = ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區",
-    "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會",
-    "本局召開案件數", "男", "女", "中高齡"];
-  const countRow = [
-    `${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`,
-    counts.mediator, counts.committee, counts.arbitration, counts.transfer,
-    counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc,
-    counts.occupationalInjuryAssoc, counts.bureau,
-    counts.male, counts.female, counts.middleAged,
-  ];
-  const ws2 = XLSX.utils.aoa_to_sheet([countHeader, countRow]);
-  ws2["!cols"] = countHeader.map((h, i) => ({ wch: i === 0 ? 28 : 10 }));
-  XLSX.utils.book_append_sheet(wb, ws2, "件數統計");
-
-  // ── 下載 ──────────────────────────────────────────────────
-  XLSX.writeFile(wb, `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xlsx`);
-}
-
-function printRecorderSheet() {
-  const weekEnd = addDays(selectedWeekStart, 4);
-  const RECORDER_CATEGORIES = new Set(["H", "F", "mediator", "committee"]);
-  const rows = getFilteredCases().filter(item =>
-    !["withdrawn", "cancelled"].includes(item.status) &&
-    RECORDER_CATEGORIES.has(item.reportCategory)
-  );
-
-  // 建立 room → date → timeSlot → case 的查找結構
-  const lookup = {};
-  rows.forEach(item => {
-    const room = displayRoom(item);
-    if (!fixedRooms.includes(room)) return;
-    if (!lookup[room]) lookup[room] = {};
-    if (!lookup[room][item.meetingDate]) lookup[room][item.meetingDate] = {};
-    lookup[room][item.meetingDate][item.meetingTime] = item;
+  // ── 記錄分配表：依紀錄人員分組 ───────────────────────────
+  const activeRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
+  const recorderMap = {};
+  activeRows.forEach(item => {
+    const rec = (item.recorder || "（未指定）").trim() || "（未指定）";
+    if (!recorderMap[rec]) recorderMap[rec] = [];
+    recorderMap[rec].push(item);
+  });
+  const sortedRecorders = Object.keys(recorderMap).sort((a, b) => {
+    if (a === "（未指定）") return 1;
+    if (b === "（未指定）") return -1;
+    return a.localeCompare(b, "zh-Hant");
   });
 
-  // 只保留本週有案件的會議室
-  const activeRooms = fixedRooms.filter(room => {
-    if (!lookup[room]) return false;
-    return Object.values(lookup[room]).some(daySlots => Object.keys(daySlots).length > 0);
+  let recorderTableHtml = "";
+  if (sortedRecorders.length === 0) {
+    recorderTableHtml = `<p style="color:#666;font-size:13px;">本週無有效案件。</p>`;
+  } else {
+    sortedRecorders.forEach(rec => {
+      const items = recorderMap[rec];
+      const recRows = items.map(item => [
+        formatDate(parseDate(item.meetingDate)),
+        getWeekdayName(parseDate(item.meetingDate)),
+        item.meetingTime,
+        displayRoom(item),
+        item.caseNo,
+        item.worker,
+        item.employer,
+        item.disputeType,
+        getMediatorDisplay(item),
+        item.owner,
+        statusLabels[item.status] || item.status,
+        item.notes,
+      ]);
+      recorderTableHtml += `
+        <div style="font-weight:700;font-size:13px;margin:14px 0 6px;
+                    padding:4px 10px;background:#dbeafe;border-left:4px solid #2563eb;border-radius:3px;">
+          紀錄：${escapeHtml(rec)}　（共 ${items.length} 件）
+        </div>
+        ${tableHtml([
+          ["開會日期","星期","開會時間","地點","案號","勞方","資方","主要爭議","調解人","承辦人","狀態","備註"],
+          ...recRows,
+        ])}`;
+    });
+  }
+
+  // ── 其他地點排程 ─────────────────────────────────────────
+  const fixedRoomSet = new Set(fixedRooms);
+  const otherRoomRows = rows.filter(item => {
+    const r = displayRoom(item);
+    return !fixedRoomSet.has(r);
   });
 
-  if (activeRooms.length === 0) {
-    alert("本週無需派紀錄的案件（H/F類型）");
-    return;
+  let otherRoomHtml = "";
+  if (otherRoomRows.length === 0) {
+    otherRoomHtml = `<p style="color:#666;font-size:13px;">本週無其他地點排程。</p>`;
+  } else {
+    // 依地點再分組
+    const otherByRoom = {};
+    otherRoomRows.forEach(item => {
+      const r = displayRoom(item);
+      if (!otherByRoom[r]) otherByRoom[r] = [];
+      otherByRoom[r].push(item);
+    });
+    Object.keys(otherByRoom).sort().forEach(room => {
+      const items = otherByRoom[room];
+      const oRows = items.map(item => [
+        formatDate(parseDate(item.meetingDate)),
+        getWeekdayName(parseDate(item.meetingDate)),
+        item.meetingTime,
+        item.caseNo,
+        item.worker,
+        item.employer,
+        item.disputeType,
+        item.owner,
+        getMediatorDisplay(item),
+        item.recorder,
+        statusLabels[item.status] || item.status,
+        item.notes,
+      ]);
+      otherRoomHtml += `
+        <div style="font-weight:700;font-size:13px;margin:14px 0 6px;
+                    padding:4px 10px;background:#fef9c3;border-left:4px solid #ca8a04;border-radius:3px;">
+          地點：${escapeHtml(room)}　（共 ${items.length} 件）
+        </div>
+        ${tableHtml([
+          ["開會日期","星期","開會時間","案號","勞方","資方","主要爭議","承辦人","調解人","紀錄","狀態","備註"],
+          ...oRows,
+        ])}`;
+    });
   }
 
-  const weekDates = Array.from({ length: 5 }, (_, i) => {
-    const d = addDays(selectedWeekStart, i);
-    return { iso: toDateInputValue(d), label: `${weekdayNames[i]}<br>${formatMonthDay(d)}` };
-  });
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 20px; }
+          h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+          h2 { font-size: 15px; margin: 24px 0 8px; padding: 5px 12px;
+               background: #e8eef5; border-left: 5px solid #2563eb; }
+          .meta { display: flex; justify-content: space-between; margin: 8px 0 16px;
+                  font-size: 12px; color: #444; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+          th, td { border: 1px solid #333; padding: 5px 6px; font-size: 12px; vertical-align: middle; }
+          th { background: #e8eef5; font-weight: 700; text-align: center; }
+          td { text-align: left; }
+          .page-break { page-break-before: always; }
+          .section-note { font-size: 11px; color: #666; margin-bottom: 6px; }
+        </style>
+      </head>
+      <body>
+        <h1>勞資爭議調解(仲裁)會議週報表</h1>
+        <div class="meta">
+          <span>日期：${escapeHtml(reportTitle)}</span>
+          <span>案件數：共 ${rows.length} 件（有效 ${activeRows.length} 件）</span>
+          <span>本週派案人員：${escapeHtml(dispatcher)}</span>
+        </div>
 
-  const minguoStart = toMinguoDate(selectedWeekStart);
-  const minguoEnd   = toMinguoDate(weekEnd);
+        <h2>一、本週排程明細</h2>
+        ${detailTable}
 
-  // 每間會議室產出獨立一頁（page-break-after）
-  const pages = activeRooms.map((room, roomIdx) => {
-    const rows_html = timeSlots.map(slot => {
-      const cells = weekDates.map(({ iso }) => {
-        const item = lookup[room]?.[iso]?.[slot];
-        if (!item) return `<td class="cell empty"></td>`;
-        const mediator = escapeHtml(getMediatorDisplay(item) || "");
-        return `<td class="cell">
-          <div class="case-no">${escapeHtml(item.caseId || "")}</div>
-          <div class="mediator">調解人：${mediator}</div>
-          <div class="owner">承辦：${escapeHtml(item.owner || "")}</div>
-          <div class="recorder-box">紀錄：___________________</div>
-        </td>`;
-      }).join("");
-      return `<tr><td class="time-col">${slot}</td>${cells}</tr>`;
-    }).join("");
+        <h2>二、件數統計</h2>
+        ${countTable}
 
-    const head_cells = weekDates.map(d => `<th>${d.label}</th>`).join("");
-    const isLast = roomIdx === activeRooms.length - 1;
+        <h2 class="page-break">三、紀錄人員分配表</h2>
+        <p class="section-note">依紀錄人員分組，排除撤回/取消案件，共 ${activeRows.length} 件，分配給 ${sortedRecorders.filter(r => r !== "（未指定）").length} 位紀錄人員。</p>
+        ${recorderTableHtml}
 
-    return `<div class="page${isLast ? "" : " page-break"}">
-      <div class="page-title">勞資爭議調解紀錄分配表</div>
-      <div class="page-subtitle">${minguoStart} ～ ${minguoEnd}</div>
-      <h2>${escapeHtml(room)}</h2>
-      <table>
-        <thead><tr><th class="time-col">時段</th>${head_cells}</tr></thead>
-        <tbody>${rows_html}</tbody>
-      </table>
-    </div>`;
-  }).join("\n");
+        <h2 class="page-break">四、其他地點排程</h2>
+        <p class="section-note">本週於固定晤談室以外地點舉辦之調解，共 ${otherRoomRows.length} 件。</p>
+        ${otherRoomHtml}
+      </body>
+    </html>
+  `;
 
-  const html = `<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="utf-8"/>
-<title>紀錄分配表 ${minguoStart}-${minguoEnd}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #fff; }
-  .no-print { text-align: right; padding: 10px 16px; }
-  .no-print button { padding: 6px 18px; font-size: 13px; cursor: pointer; }
-
-  .page {
-    width: 277mm;      /* A4 橫式可用寬度 */
-    min-height: 190mm;
-    padding: 10mm 10mm 8mm;
-    display: flex;
-    flex-direction: column;
-  }
-  .page-break { page-break-after: always; }
-  .page-title { text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 3px; }
-  .page-subtitle { text-align: center; font-size: 14px; color: #222; margin-bottom: 8px; }
-  h2 {
-    font-size: 16px; font-weight: bold;
-    background: #c8d4e8; padding: 6px 10px;
-    border: 2px solid #555; border-bottom: none;
-  }
-  table { width: 100%; border-collapse: collapse; flex: 1; }
-  th, td { border: 2px solid #555; padding: 6px 8px; vertical-align: top; }
-  th { background: #dde4ef; text-align: center; font-size: 14px; font-weight: bold; white-space: nowrap; color: #111; }
-  .time-col { width: 58px; text-align: center; font-weight: bold; font-size: 14px; color: #111; white-space: nowrap; }
-  .cell { height: 72px; }
-  .cell.empty { background: #f0f0f0; }
-  .case-no { font-weight: bold; font-size: 15px; color: #000; }
-  .mediator { font-size: 14px; color: #003399; font-weight: bold; margin-top: 3px; }
-  .owner { font-size: 13px; color: #111; margin-top: 2px; }
-  .recorder-box { font-size: 12px; color: #333; font-weight: bold; margin-top: 6px; border-top: 2px solid #999; padding-top: 4px; }
-
-  @media print {
-    @page { size: A4 landscape; margin: 8mm; }
-    body { background: #fff; }
-    .no-print { display: none; }
-    .page { width: 100%; padding: 0; }
-    .page-break { page-break-after: always; }
-    table { font-size: 13px; }
-  }
-</style>
-</head>
-<body>
-  <div class="no-print">
-    <button onclick="window.print()">🖨 列印</button>
-  </div>
-  ${pages}
-</body>
-</html>`;
-
-  const win = window.open("", "_blank");
-  win.document.write(html);
-  win.document.close();
+  const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function handleWeekChange(event) {
@@ -1687,31 +1646,13 @@ function tableHtml(rows) {
     .join("")}</table>`;
 }
 
-// 新版代碼（A/B/E/F/H/J/AH/EH/JH）→ 舊版統計 key 對應
-const reportCategoryCodeMap = {
-  "A":  "laborAssocCity",
-  "AH": "laborAssocCity",
-  "B":  "laborAssocCounty",
-  "BH": "laborAssocCounty",
-  "E":  "laborEmploymentAssoc",
-  "EH": "laborEmploymentAssoc",
-  "J":  "occupationalInjuryAssoc",
-  "JH": "occupationalInjuryAssoc",
-  "H":  "mediator",
-  "F":  "committee",
-  "I":  "arbitration",
-  "G":  "transfer",
-};
-
 function buildWeeklyCounts(rows) {
   const counts = Object.fromEntries(Object.keys(reportCategoryLabels).map((key) => [key, 0]));
   counts.male = 0;
   counts.female = 0;
   counts.middleAged = 0;
   rows.forEach((item) => {
-    // 支援新版代碼（A/F/H…）及舊版字串（mediator/committee…）兩種格式
-    const raw = item.reportCategory || "mediator";
-    const key = reportCategoryCodeMap[raw.toUpperCase()] ?? raw;
+    const key = item.reportCategory || "mediator";
     counts[key] = (counts[key] || 0) + 1;
     counts.male += toNumber(item.maleCount) || inferGenderCount(item.workerGender, "男");
     counts.female += toNumber(item.femaleCount) || inferGenderCount(item.workerGender, "女");
@@ -1921,13 +1862,6 @@ async function saveRoomReservation(date, session, rooms) {
   if (error) alert(`儲存失敗：${error.message}`);
 }
 
-// 括號正規化：把全形 （） 和半形 () 統一成半形，方便比對
-function normalizeBrackets(str) {
-  return String(str || "")
-    .replace(/（/g, "(")
-    .replace(/）/g, ")");
-}
-
 // 當日期或時間改變時，動態更新 dialog 內的會議室選單
 function updateRoomSelect() {
   const dateVal = document.querySelector("#meetingDate")?.value;
@@ -1936,28 +1870,19 @@ function updateRoomSelect() {
   if (!roomSel || !dateVal || !timeVal) return;
 
   const allowed = getAllowedRooms(dateVal, timeVal);
-
-  // 將 allowed Set 轉成正規化（全/半形統一）後的 Set，避免括號格式不符
-  const allowedNorm = allowed
-    ? new Set([...allowed].map(r => normalizeBrackets(r)))
-    : null;
+  const currentVal = roomSel.value;
 
   Array.from(roomSel.options).forEach(opt => {
-    // 記住原始文字（避免多次執行時累加「不可用」）
-    if (!opt.dataset.origText) opt.dataset.origText = opt.value;
-    const cleanText = opt.dataset.origText;
-
-    if (opt.value === "其他") { opt.disabled = false; opt.text = cleanText; return; }
-
-    if (allowedNorm === null) {
+    if (opt.value === "其他") { opt.disabled = false; return; }
+    if (allowed === null) {
       opt.disabled = false;
-      opt.text = cleanText;
-    } else if (allowedNorm.has(normalizeBrackets(opt.value))) {
+      opt.text = opt.value;
+    } else if (allowed.has(opt.value)) {
       opt.disabled = false;
-      opt.text = cleanText;
+      opt.text = opt.value;
     } else {
       opt.disabled = true;
-      opt.text = `${cleanText}（不可用）`;
+      opt.text = `${opt.value}（不可用）`;
     }
   });
 
@@ -1971,7 +1896,7 @@ function updateRoomSelect() {
   // 顯示/隱藏提示
   const hint = document.querySelector("#roomAvailHint");
   if (hint) {
-    if (allowedNorm === null) {
+    if (allowed === null) {
       hint.textContent = "";
       hint.hidden = true;
     } else {
