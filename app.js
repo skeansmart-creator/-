@@ -887,7 +887,18 @@ function createCaseCard(item, isConflict = false) {
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
   const isReserved = item.status === "reserved";
   const isCommitteeType = item.reportCategory === "F";
-  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
+  const cat = (item.reportCategory || "").trim().toUpperCase();
+  const isAssocType = ["A", "AH", "E", "EH", "J", "JH",
+    "laborAssocCity", "laborAssocCounty", "laborEmploymentAssoc", "occupationalInjuryAssoc"
+  ].includes(cat) || ["laborAssocCity","laborAssocCounty","laborEmploymentAssoc","occupationalInjuryAssoc"].includes(item.reportCategory);
+  button.className = [
+    "case-card",
+    item.status,
+    isSpecial       ? "special"         : "",
+    isConflict      ? "conflict"        : "",
+    isCommitteeType ? "committee-type"  : "",
+    isAssocType     ? "assoc-type"      : "",
+  ].filter(Boolean).join(" ");
   button.type = "button";
   // 衝期標示：橘色，放在 specialTag 前
   const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
