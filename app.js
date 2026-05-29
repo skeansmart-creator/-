@@ -803,10 +803,6 @@ function renderIntakeList() {
 
 function renderCalendar(weekDates, filtered) {
   elements.calendar.innerHTML = "";
-  elements.calendar.append(createCell("", "day-head"));
-  weekDates.forEach((date, index) => {
-    elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
-  });
 
   const roomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(二)", "晤談室(三)", "勞資爭議調解會議室"];
   const roomRank = (item) => {
@@ -815,7 +811,23 @@ function renderCalendar(weekDates, filtered) {
     return idx >= 0 ? idx : roomOrder.length;
   };
 
-  // 建立衝突 key set：同日期+時段+地點出現 2 筆以上視為衝突
+  // 動態時段：固定四個 + 當週有案件的其他時間，合併排序
+  const extraSlots = [...new Set(filtered.map(item => item.meetingTime))]
+    .filter(t => t && !timeSlots.includes(t));
+  const allSlots = [...timeSlots, ...extraSlots].sort();
+
+  // 動態設定 grid 欄數（時段欄 + 5天）與列數（標題列 + 各時段列）
+  elements.calendar.style.gridTemplateColumns = "80px repeat(5, 1fr)";
+  elements.calendar.style.gridTemplateRows =
+    `auto ${allSlots.map(() => "auto").join(" ")}`;
+
+  // 標題列
+  elements.calendar.append(createCell("", "day-head"));
+  weekDates.forEach((date, index) => {
+    elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
+  });
+
+  // 建立衝突 key set
   const slotRoomCount = {};
   filtered.forEach(item => {
     const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
@@ -823,8 +835,11 @@ function renderCalendar(weekDates, filtered) {
   });
   const conflictKeys = new Set(Object.keys(slotRoomCount).filter(k => slotRoomCount[k] > 1));
 
-  timeSlots.forEach((slot) => {
-    elements.calendar.append(createCell(slot, "time-cell"));
+  allSlots.forEach((slot) => {
+    const isExtra = !timeSlots.includes(slot);
+    const timeCell = createCell(slot, "time-cell");
+    if (isExtra) timeCell.style.cssText += ";color:#b45309;font-style:italic;";
+    elements.calendar.append(timeCell);
     weekDates.forEach((date) => {
       const cell = createCell("", "calendar-cell");
       const dateKey = toDateInputValue(date);
