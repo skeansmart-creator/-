@@ -1502,28 +1502,92 @@ function printRecorderSheet() {
     return;
   }
 
-  // 固定五間會議室，有 H/F 案件的才列出
-  const roomOrder = ["晤談室(一)", "晤談室(二)", "晤談室(三)", "晤談室(四)", "勞資爭議調解會議室"];
-  const slots     = ["09:00", "10:30", "13:30", "15:00"];
-  const dayNames  = ["週一", "週二", "週三", "週四", "週五"];
+  // 固定會議室順序
+  const fixedRoomOrder = ["晤談室(一)", "晤談室(二)", "晤談室(三)", "晤談室(四)", "勞資爭議調解會議室"];
 
-  // 建立查找 map
+  // 建立完整查找 map（含其他地點）
   const lookup = {};
   targetRows.forEach(item => {
-    const r = item.room === "其他" ? null : item.room;
-    if (!r || !roomOrder.includes(r)) return;
+    const r = displayRoom(item); // 包含 roomOther
     if (!lookup[r]) lookup[r] = {};
     if (!lookup[r][item.meetingDate]) lookup[r][item.meetingDate] = {};
     if (!lookup[r][item.meetingDate][item.meetingTime]) lookup[r][item.meetingDate][item.meetingTime] = [];
     lookup[r][item.meetingDate][item.meetingTime].push(item);
   });
 
-  // 只留有案件的會議室
-  const activeRooms = roomOrder.filter(r => lookup[r]);
-  if (!activeRooms.length) {
-    alert("本週沒有 H/F 案件分配在固定會議室。");
+  // 有案件的固定會議室
+  const activeFixed = fixedRoomOrder.filter(r => lookup[r]);
+  // 有案件的其他地點（不在固定列表裡的）
+  const activeOther = Object.keys(lookup).filter(r => !fixedRoomOrder.includes(r)).sort();
+
+  if (!activeFixed.length && !activeOther.length) {
+    alert("本週沒有 H/F 案件。");
     return;
   }
+
+  // ── 彈出選取視窗 ─────────────────────────────────────────
+  let dlg = document.getElementById("printRoomSelectDlg");
+  if (dlg) dlg.remove(); // 每次重建確保選項最新
+
+  dlg = document.createElement("dialog");
+  dlg.id = "printRoomSelectDlg";
+  dlg.style.cssText = "min-width:340px;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);";
+
+  const fixedChecks = activeFixed.map(r =>
+    `<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:14px;">
+      <input type="checkbox" value="${escapeHtml(r)}" checked style="width:16px;height:16px;cursor:pointer;">
+      ${escapeHtml(r)}
+    </label>`
+  ).join("");
+
+  const otherChecks = activeOther.length ? `
+    <div style="margin-top:12px;font-weight:700;font-size:13px;color:#6b7280;margin-bottom:4px;">其他地點</div>
+    ${activeOther.map(r =>
+      `<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:14px;">
+        <input type="checkbox" value="${escapeHtml(r)}" checked style="width:16px;height:16px;cursor:pointer;">
+        ${escapeHtml(r)}
+      </label>`
+    ).join("")}` : "";
+
+  dlg.innerHTML = `
+    <div style="padding:20px 24px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 style="margin:0;font-size:16px;">選擇要列印的地點</h2>
+        <button id="closePrintRoomDlg" type="button"
+          style="background:none;border:none;font-size:22px;cursor:pointer;color:#666;line-height:1;">×</button>
+      </div>
+      <div style="font-size:13px;color:#666;margin-bottom:12px;">只列出本週有 H/F 案件的地點，可自行勾選。</div>
+      <div style="font-weight:700;font-size:13px;color:#6b7280;margin-bottom:4px;">固定會議室</div>
+      ${fixedChecks}
+      ${otherChecks}
+    </div>
+    <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e5e7eb;margin-top:16px;">
+      <button id="cancelPrintRoomDlg" type="button" class="secondary-button">取消</button>
+      <button id="confirmPrintRoomDlg" type="button" class="primary-button">列印</button>
+    </div>`;
+  document.body.appendChild(dlg);
+
+  document.getElementById("closePrintRoomDlg").onclick  = () => dlg.close();
+  document.getElementById("cancelPrintRoomDlg").onclick = () => dlg.close();
+  document.getElementById("confirmPrintRoomDlg").onclick = () => {
+    const selected = Array.from(dlg.querySelectorAll("input[type=checkbox]:checked")).map(cb => cb.value);
+    dlg.close();
+    if (!selected.length) { alert("請至少勾選一個地點。"); return; }
+    _doPrintRecorderSheet(selected, lookup, weekDates, weekEnd, fixedRoomOrder);
+  };
+
+  dlg.showModal();
+}
+
+function _doPrintRecorderSheet(selectedRooms, lookup, weekDates, weekEnd, fixedRoomOrder) {
+  const slots    = ["09:00", "10:30", "13:30", "15:00"];
+  const dayNames = ["週一", "週二", "週三", "週四", "週五"];
+
+  // 依照固定順序 + 其他地點順序排列選取的房間
+  const orderedRooms = [
+    ...fixedRoomOrder.filter(r => selectedRooms.includes(r)),
+    ...selectedRooms.filter(r => !fixedRoomOrder.includes(r)).sort(),
+  ];
 
   // 民國日期標題
   const mingStart = toMinguoDate(selectedWeekStart);
@@ -1531,17 +1595,14 @@ function printRecorderSheet() {
   const titleDate = mingStart.slice(0,3) + "-" + mingStart.slice(3,5) + "-" + mingStart.slice(5) +
                     " ～ " + mingEnd.slice(0,3) + "-" + mingEnd.slice(3,5) + "-" + mingEnd.slice(5);
 
-  // 產生每間會議室的表格 HTML
-  const roomBlocks = activeRooms.map((room, roomIdx) => {
-    const isLast = roomIdx === activeRooms.length - 1;
+  const roomBlocks = orderedRooms.map((room, roomIdx) => {
+    const isLast = roomIdx === orderedRooms.length - 1;
 
-    // 表頭
     const thCells = dayNames.map((name, di) => {
       const d = weekDates[di];
       return `<th>${name}<br><span style="font-weight:400;">${d.getMonth()+1}/${d.getDate()}</span></th>`;
     }).join("");
 
-    // 各時段列
     const slotRows = slots.map(slot => {
       const tds = weekDates.map(date => {
         const dateKey = toDateInputValue(date);
@@ -1583,7 +1644,7 @@ function printRecorderSheet() {
     .no-print { text-align: right; padding: 6px 12px; }
     @media print { .no-print { display: none; } }
     h1 { text-align: center; font-size: 16px; font-weight: 700; margin: 6px 0 10px; color: #000; }
-    .room-block { width: 277mm; margin: 0 auto 0; }
+    .room-block { width: 277mm; margin: 0 auto; }
     .page-break { page-break-after: always; }
     h2 { font-size: 15px; font-weight: 700; color: #000; margin: 0 0 6px;
          padding: 4px 10px; background: #d9e8fb; border-left: 5px solid #2563eb; }
