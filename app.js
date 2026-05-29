@@ -1323,7 +1323,9 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-function exportWeeklyReport() {
+async function exportWeeklyReport() {
+  const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+
   // 地點排序
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
   const weekRoomRank = (item) => {
@@ -1343,12 +1345,12 @@ function exportWeeklyReport() {
     });
 
   const weekEnd = addDays(selectedWeekStart, 4);
-  const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
-  const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
+  const wb = XLSX.utils.book_new();
 
-  // ── 一、排程明細 ──────────────────────────────────────────
-  const detailRows = rows.map((item) => [
+  // ── 工作表一：週報明細 ────────────────────────────────────
+  const detailHeader = ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"];
+  const detailData = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
@@ -1359,20 +1361,33 @@ function exportWeeklyReport() {
     item.owner,
     getMediatorDisplay(item),
     item.recorder,
-    item.notes,
+    item.notes ?? "",
   ]);
-  const detailTable = tableHtml([
-    ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
-    ...detailRows,
-  ]);
+  const titleRow = [`勞資爭議調解(仲裁)會議週報表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${rows.length} 件`];
+  const ws1 = XLSX.utils.aoa_to_sheet([titleRow, detailHeader, ...detailData]);
+  ws1["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: detailHeader.length - 1 } }];
+  ws1["!cols"] = [
+    { wch: 14 }, { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 14 },
+    { wch: 18 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 8 }, { wch: 24 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, "週報明細");
 
-  // ── 二、件數統計 ──────────────────────────────────────────
-  const countTable = tableHtml([
-    ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
-    [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
-  ]);
+  // ── 工作表二：件數統計 ────────────────────────────────────
+  const countHeader = ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區",
+    "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會",
+    "本局召開案件數", "男", "女", "中高齡"];
+  const countRow = [
+    `${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`,
+    counts.mediator, counts.committee, counts.arbitration, counts.transfer,
+    counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc,
+    counts.occupationalInjuryAssoc, counts.bureau,
+    counts.male, counts.female, counts.middleAged,
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet([countHeader, countRow]);
+  ws2["!cols"] = countHeader.map((_, i) => ({ wch: i === 0 ? 28 : 10 }));
+  XLSX.utils.book_append_sheet(wb, ws2, "件數統計");
 
-  // ── 三、紀錄分配表 ────────────────────────────────────────
+  // ── 工作表三：紀錄分配表 ─────────────────────────────────
   const activeRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
   const recorderMap = {};
   activeRows.forEach(item => {
@@ -1386,13 +1401,17 @@ function exportWeeklyReport() {
     return a.localeCompare(b, "zh-Hant");
   });
 
-  let recorderTableHtml = "";
-  if (sortedRecorders.length === 0) {
-    recorderTableHtml = "<p>本週無有效案件。</p>";
-  } else {
-    sortedRecorders.forEach(rec => {
-      const items = recorderMap[rec];
-      const recRows = items.map(item => [
+  const recHeader = ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "調解人", "承辦人", "狀態", "備註"];
+  const ws3Data = [
+    [`紀錄人員分配表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　有效案件 ${activeRows.length} 件`],
+  ];
+  sortedRecorders.forEach(rec => {
+    const items = recorderMap[rec];
+    // 紀錄人員標題列
+    ws3Data.push([`【紀錄：${rec}】　共 ${items.length} 件`]);
+    ws3Data.push(recHeader);
+    items.forEach(item => {
+      ws3Data.push([
         formatDate(parseDate(item.meetingDate)),
         getWeekdayName(parseDate(item.meetingDate)),
         item.meetingTime,
@@ -1404,105 +1423,50 @@ function exportWeeklyReport() {
         getMediatorDisplay(item),
         item.owner,
         statusLabels[item.status] || item.status,
-        item.notes,
+        item.notes ?? "",
       ]);
-      const recTable = tableHtml([
-        ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "調解人", "承辦人", "狀態", "備註"],
-        ...recRows,
-      ]);
-      recorderTableHtml +=
-        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;padding:4px 10px;background:#dbeafe;border-left:4px solid #2563eb;border-radius:3px;">' +
-        "紀錄：" + escapeHtml(rec) + "　（共 " + items.length + " 件）" +
-        "</div>" + recTable;
     });
-  }
+    ws3Data.push([]); // 空行分隔
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
+  ws3["!cols"] = [
+    { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 16 }, { wch: 14 },
+    { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 24 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws3, "紀錄分配表");
 
-  // ── 四、其他地點排程 ──────────────────────────────────────
+  // ── 工作表四：其他地點排程 ───────────────────────────────
   const fixedRoomSet = new Set(fixedRooms);
   const otherRoomRows = rows.filter(item => !fixedRoomSet.has(displayRoom(item)));
+  const otherHeader = ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "狀態", "備註"];
+  const ws4Data = [
+    [`其他地點排程　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${otherRoomRows.length} 件`],
+    otherRoomRows.length === 0 ? ["（本週無其他地點排程）"] : otherHeader,
+    ...otherRoomRows.map(item => [
+      formatDate(parseDate(item.meetingDate)),
+      getWeekdayName(parseDate(item.meetingDate)),
+      item.meetingTime,
+      displayRoom(item),
+      item.caseNo,
+      item.worker,
+      item.employer,
+      item.disputeType,
+      item.owner,
+      getMediatorDisplay(item),
+      item.recorder,
+      statusLabels[item.status] || item.status,
+      item.notes ?? "",
+    ]),
+  ];
+  const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
+  ws4["!cols"] = [
+    { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 16 }, { wch: 14 },
+    { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 24 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws4, "其他地點排程");
 
-  let otherRoomHtml = "";
-  if (otherRoomRows.length === 0) {
-    otherRoomHtml = "<p>本週無其他地點排程。</p>";
-  } else {
-    const otherByRoom = {};
-    otherRoomRows.forEach(item => {
-      const r = displayRoom(item);
-      if (!otherByRoom[r]) otherByRoom[r] = [];
-      otherByRoom[r].push(item);
-    });
-    Object.keys(otherByRoom).sort().forEach(room => {
-      const items = otherByRoom[room];
-      const oRows = items.map(item => [
-        formatDate(parseDate(item.meetingDate)),
-        getWeekdayName(parseDate(item.meetingDate)),
-        item.meetingTime,
-        item.caseNo,
-        item.worker,
-        item.employer,
-        item.disputeType,
-        item.owner,
-        getMediatorDisplay(item),
-        item.recorder,
-        statusLabels[item.status] || item.status,
-        item.notes,
-      ]);
-      const oTable = tableHtml([
-        ["開會日期", "星期", "開會時間", "案號", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "狀態", "備註"],
-        ...oRows,
-      ]);
-      otherRoomHtml +=
-        '<div style="font-weight:700;font-size:13px;margin:14px 0 6px;padding:4px 10px;background:#fef9c3;border-left:4px solid #ca8a04;border-radius:3px;">' +
-        "地點：" + escapeHtml(room) + "　（共 " + items.length + " 件）" +
-        "</div>" + oTable;
-    });
-  }
-
-  const html = `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 20px; }
-          h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
-          h2 { font-size: 15px; margin: 24px 0 8px; padding: 5px 12px; background: #e8eef5; border-left: 5px solid #2563eb; }
-          .meta { display: flex; justify-content: space-between; margin: 8px 0 16px; font-size: 12px; color: #444; }
-          table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
-          th, td { border: 1px solid #333; padding: 5px 6px; font-size: 12px; vertical-align: middle; }
-          th { background: #e8eef5; font-weight: 700; text-align: center; }
-          td { text-align: left; }
-          .page-break { page-break-before: always; }
-          .section-note { font-size: 11px; color: #666; margin-bottom: 6px; }
-        </style>
-      </head>
-      <body>
-        <h1>勞資爭議調解(仲裁)會議週報表</h1>
-        <div class="meta">
-          <span>日期：${escapeHtml(reportTitle)}</span>
-          <span>案件數：共 ${rows.length} 件（有效 ${activeRows.length} 件）</span>
-          <span>本週派案人員：${escapeHtml(dispatcher)}</span>
-        </div>
-        <h2>一、本週排程明細</h2>
-        ${detailTable}
-        <h2>二、件數統計</h2>
-        ${countTable}
-        <h2 class="page-break">三、紀錄人員分配表</h2>
-        <p class="section-note">依紀錄人員分組，排除撤回/取消案件，共 ${activeRows.length} 件，分配給 ${sortedRecorders.filter(r => r !== "（未指定）").length} 位紀錄人員。</p>
-        ${recorderTableHtml}
-        <h2 class="page-break">四、其他地點排程</h2>
-        <p class="section-note">本週於固定晤談室以外地點舉辦之調解，共 ${otherRoomRows.length} 件。</p>
-        ${otherRoomHtml}
-      </body>
-    </html>
-  `;
-
-  const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
-  link.click();
-  URL.revokeObjectURL(url);
+  // ── 下載 ──────────────────────────────────────────────────
+  XLSX.writeFile(wb, `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xlsx`);
 }
 
 function handleWeekChange(event) {
@@ -1638,8 +1602,23 @@ function buildWeeklyCounts(rows) {
   counts.male = 0;
   counts.female = 0;
   counts.middleAged = 0;
+  // 新版 reportCategory 存英文代碼（A/B/E/F/H/J…），需先轉換成統計 key
+  const codeToKey = {
+    A: "laborAssocCity", AH: "laborAssocCity",
+    B: "laborAssocCounty", BH: "laborAssocCounty",
+    E: "laborEmploymentAssoc", EH: "laborEmploymentAssoc",
+    J: "occupationalInjuryAssoc", JH: "occupationalInjuryAssoc",
+    H: "mediator",
+    F: "committee",
+    I: "arbitration",
+    G: "transfer",
+  };
   rows.forEach((item) => {
-    const key = item.reportCategory || "mediator";
+    const raw = (item.reportCategory || "").trim();
+    // 若已是舊版長字串 key（如 "mediator"），直接用；否則查代碼表
+    const key = Object.prototype.hasOwnProperty.call(reportCategoryLabels, raw)
+      ? raw
+      : (codeToKey[raw] || reportCategoryFromMethod(raw) || "mediator");
     counts[key] = (counts[key] || 0) + 1;
     counts.male += toNumber(item.maleCount) || inferGenderCount(item.workerGender, "男");
     counts.female += toNumber(item.femaleCount) || inferGenderCount(item.workerGender, "女");
