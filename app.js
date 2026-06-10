@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610a");
+console.log("app.js version: 20260610b");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -2126,10 +2126,18 @@ function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
   });
 
   if (!tableRows) {
-    tableRows = `<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:20px;">本週無有效案件</td></tr>`;
+    tableRows = `<tr><td colspan="8" style="border:1px solid #333;padding:6px 8px;vertical-align:middle;text-align:center;color:#9ca3af;padding:20px;">本週無有效案件</td></tr>`;
   }
 
-  const tableHtmlStr = `
+  // td 統一在 tableRows 生成時就帶完整 border style，此處直接輸出不做二次替換
+  const tdBase = 'border:1px solid #333;padding:6px 8px;vertical-align:middle;';
+  const styledRows = tableRows
+    // 補上沒有 style 的 <td>（純 <td>）
+    .replace(/<td>/g, `<td style="${tdBase}">`)
+    // 補上有其他 style 但沒有 border 的 <td style="...">
+    .replace(/<td style="(?!border)/g, `<td style="${tdBase}`);
+
+  const styledTable = `
     <table style="border-collapse:collapse;width:100%;font-size:12px;">
       <thead>
         <tr style="background:#dde6f0;">
@@ -2143,14 +2151,9 @@ function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
           <th style="border:1px solid #333;padding:7px 10px;text-align:center;">紀錄人員</th>
         </tr>
       </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
+      <tbody>${styledRows}</tbody>
     </table>
   `;
-
-  // 套用 border 到所有 td
-  const styledTable = tableHtmlStr.replace(/<td /g, '<td style="border:1px solid #333;padding:6px 8px;vertical-align:middle;" ').replace(/style="border[^"]*" style="/g, 'style="');
 
   if (!forPrint) return styledTable;
 
@@ -2168,14 +2171,29 @@ function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
     th { background: #dde6f0; border: 1px solid #333; padding: 7px 8px; text-align: center; font-weight: 700; }
     td { border: 1px solid #333; padding: 6px 8px; vertical-align: middle; }
     .note { font-size: 11px; color: #666; margin-top: 14px; }
+    .toolbar {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid #d1d5db;
+    }
+    .btn {
+      padding: 6px 18px; border-radius: 6px; font-size: 13px;
+      cursor: pointer; font-family: inherit; border: 1px solid #d1d5db;
+    }
+    .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 600; }
+    .btn-secondary { background: #f3f4f6; color: #374151; }
     @media print {
       body { margin: 10mm 14mm; }
       @page { size: A4 landscape; margin: 12mm; }
-      button, .no-print { display: none !important; }
+      .toolbar, .no-print { display: none !important; }
     }
   </style>
 </head>
 <body>
+  <div class="toolbar no-print">
+    <button class="btn btn-secondary" onclick="window.close()">✕ 關閉</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨 列印</button>
+  </div>
   <h1>勞資爭議調解紀錄分配表</h1>
   <div class="subtitle">${escapeHtml(minguo)}</div>
   ${styledTable}
