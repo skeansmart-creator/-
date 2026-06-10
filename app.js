@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610c");
+console.log("app.js version: 20260610d");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -2204,7 +2204,7 @@ function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
 
 /**
  * 開啟「列印記錄分配表」互動 Dialog
- * 讓使用者在匯出/列印前可填入或修改每筆案件的紀錄人員
+ * 使用 overlay div 而非 <dialog>，避免瀏覽器 dialog 堆疊限制
  */
 function openRecorderAssignmentDialog() {
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
@@ -2225,19 +2225,29 @@ function openRecorderAssignmentDialog() {
       return weekRoomRank(a) - weekRoomRank(b);
     });
 
-  const weekEnd  = addDays(selectedWeekStart, 4);
-  const minguo   = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日 ～ ${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const minguo  = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日 ～ ${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
 
-  // 每次都刪除舊 dialog、重建，確保事件綁定乾淨
-  const oldDlg = document.getElementById("recorderAssignDlg");
-  if (oldDlg) oldDlg.remove();
+  // 移除舊的 overlay
+  const oldOverlay = document.getElementById("recorderAssignOverlay");
+  if (oldOverlay) oldOverlay.remove();
 
-  const dlg = document.createElement("dialog");
-  dlg.id = "recorderAssignDlg";
-  dlg.style.cssText = "min-width:820px;max-width:95vw;max-height:90vh;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);overflow:hidden;display:flex;flex-direction:column;";
-  document.body.appendChild(dlg);
+  // 建立 overlay 背景層
+  const overlay = document.createElement("div");
+  overlay.id = "recorderAssignOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";
 
-  // 依日期分組，建立可編輯表格 HTML
+  // 建立 panel
+  const panel = document.createElement("div");
+  panel.style.cssText = "background:#fff;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.22);min-width:820px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;";
+
+  // 關閉函式
+  const closeOverlay = () => overlay.remove();
+
+  // 點擊背景關閉
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
+
+  // 依日期分組
   const byDate = {};
   rows.forEach(item => {
     if (!byDate[item.meetingDate]) byDate[item.meetingDate] = [];
@@ -2247,7 +2257,7 @@ function openRecorderAssignmentDialog() {
   let tableBody = "";
   const sortedDates = Object.keys(byDate).sort();
   if (sortedDates.length === 0) {
-    tableBody = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;">本週無有效案件資料</td></tr>`;
+    tableBody = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;border:1px solid #e2e8f0;">本週無有效案件資料</td></tr>`;
   } else {
     sortedDates.forEach(dateKey => {
       const dayItems = byDate[dateKey];
@@ -2259,15 +2269,16 @@ function openRecorderAssignmentDialog() {
         const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
         const mediatorDisplay = escapeHtml(getMediatorDisplay(item));
         const rowBg = idx % 2 === 0 ? "" : "background:#f9fafb;";
+        const tdStyle = "border:1px solid #e2e8f0;padding:6px 8px;vertical-align:middle;";
         tableBody += `<tr style="${rowBg}">
-          ${idx === 0 ? `<td rowspan="${dayItems.length}" style="text-align:center;font-weight:700;background:#eef3fb;vertical-align:middle;white-space:nowrap;font-size:12px;">${dateLabel}</td>` : ""}
-          <td style="text-align:center;font-size:12px;">${escapeHtml(item.meetingTime)}</td>
-          <td style="font-size:12px;white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
-          <td style="font-size:12px;">${escapeHtml(item.caseNo || "（待補）")}</td>
-          <td style="font-size:12px;">${escapeHtml(item.worker || "")}</td>
-          <td style="font-size:12px;">${escapeHtml(item.employer || "")}</td>
-          <td style="font-size:12px;text-align:center;">${isSpecial ? '<span style="color:#dc2626;font-weight:700;" title="特殊案件">★</span> ' : ""}${mediatorDisplay}</td>
-          <td style="padding:3px 6px;">
+          ${idx === 0 ? `<td rowspan="${dayItems.length}" style="${tdStyle}text-align:center;font-weight:700;background:#eef3fb;white-space:nowrap;font-size:12px;">${dateLabel}</td>` : ""}
+          <td style="${tdStyle}text-align:center;font-size:12px;">${escapeHtml(item.meetingTime)}</td>
+          <td style="${tdStyle}font-size:12px;white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
+          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.caseNo || "（待補）")}</td>
+          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.worker || "")}</td>
+          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.employer || "")}</td>
+          <td style="${tdStyle}font-size:12px;text-align:center;">${isSpecial ? '<span style="color:#dc2626;font-weight:700;" title="特殊案件">★</span> ' : ""}${mediatorDisplay}</td>
+          <td style="border:1px solid #e2e8f0;padding:3px 6px;vertical-align:middle;">
             <input type="text" value="${recorderVal}"
               data-recorder-key="${escapeHtml(itemKey)}"
               placeholder="填入姓名"
@@ -2278,11 +2289,11 @@ function openRecorderAssignmentDialog() {
     });
   }
 
-  dlg.innerHTML = `
+  panel.innerHTML = `
     <div style="padding:18px 24px 12px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <h2 style="margin:0;font-size:17px;">列印記錄分配表</h2>
-        <button type="button" onclick="document.getElementById('recorderAssignDlg').close()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 4px;">×</button>
+        <button id="recorderCloseBtnX" type="button" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 6px;">×</button>
       </div>
       <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(minguo)}　共 ${rows.length} 件</p>
       <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">可在下方「紀錄人員」欄位直接輸入姓名，修改後再列印或匯出。</p>
@@ -2290,15 +2301,15 @@ function openRecorderAssignmentDialog() {
     <div style="overflow-y:auto;flex:1;padding:0 24px 8px;">
       <table style="width:100%;border-collapse:collapse;margin-top:14px;">
         <thead>
-          <tr style="position:sticky;top:0;z-index:1;">
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap;">日期</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 6px;text-align:center;font-size:12px;white-space:nowrap;">時間</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">地點</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">案號</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">勞方</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">資方</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">調解人</th>
-            <th style="background:#fff3cd;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;min-width:120px;">紀錄人員 ✏️</th>
+          <tr>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap;position:sticky;top:0;">日期</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 6px;text-align:center;font-size:12px;white-space:nowrap;position:sticky;top:0;">時間</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">地點</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">案號</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">勞方</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">資方</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">調解人</th>
+            <th style="background:#fff3cd;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;min-width:120px;position:sticky;top:0;">紀錄人員 ✏️</th>
           </tr>
         </thead>
         <tbody id="recorderTableBody">
@@ -2308,24 +2319,29 @@ function openRecorderAssignmentDialog() {
     </div>
     <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
       <div style="flex:1;min-width:200px;">
-        <label style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:6px;">
+        <label style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="recorderSaveBack" style="width:14px;height:14px;" />
           儲存紀錄人員修改回案件資料
         </label>
       </div>
-      <button id="cancelRecorderDlg" type="button" class="secondary-button">取消</button>
-      <button id="printRecorderTable" type="button" class="secondary-button" style="min-width:120px;">🖨 列印分配表</button>
-      <button id="exportWeeklyWithRecorder" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報（含分配表）</button>
+      <button id="recorderCancelBtn" type="button" class="secondary-button">取消</button>
+      <button id="recorderPrintBtn" type="button" class="secondary-button" style="min-width:120px;">🖨 列印分配表</button>
+      <button id="recorderExportBtn" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報（含分配表）</button>
     </div>
   `;
 
-  dlg.querySelector("#cancelRecorderDlg").addEventListener("click", () => dlg.close());
+  // 所有按鈕直接用 JS 綁定在 panel 元素上
+  panel.querySelector("#recorderCloseBtnX").addEventListener("click", closeOverlay);
+  panel.querySelector("#recorderCancelBtn").addEventListener("click", closeOverlay);
 
-  dlg.querySelector("#printRecorderTable").addEventListener("click", () => {
-    const overrides = collectRecorderOverrides();
-    const allRows = getFilteredCases().slice().sort((a,b) => a.meetingDate.localeCompare(b.meetingDate) || a.meetingTime.localeCompare(b.meetingTime));
+  panel.querySelector("#recorderPrintBtn").addEventListener("click", () => {
+    const overrides = collectRecorderOverrides(panel);
+    const allRows = getFilteredCases()
+      .filter(item => !["withdrawn","cancelled"].includes(item.status))
+      .slice()
+      .sort((a,b) => a.meetingDate.localeCompare(b.meetingDate) || a.meetingTime.localeCompare(b.meetingTime));
     const printHtml = buildRecorderAssignmentTableHtml(allRows, overrides, true);
-    const win = window.open("", "_blank", "width=1000,height=700");
+    const win = window.open("", "_blank", "width=1100,height=750");
     if (!win) { alert("請允許彈出視窗以列印分配表"); return; }
     win.document.write(printHtml);
     win.document.close();
@@ -2333,32 +2349,34 @@ function openRecorderAssignmentDialog() {
     setTimeout(() => { win.print(); }, 400);
   });
 
-  dlg.querySelector("#exportWeeklyWithRecorder").addEventListener("click", async () => {
-    const overrides = collectRecorderOverrides();
-    // 若勾選「儲存回案件資料」，更新 cases 並同步 Supabase
-    if (dlg.querySelector("#recorderSaveBack")?.checked) {
-      await saveRecorderOverridesBack(overrides);
+  panel.querySelector("#recorderExportBtn").addEventListener("click", async () => {
+    const overrides = collectRecorderOverrides(panel);
+    if (panel.querySelector("#recorderSaveBack").checked) {
+      await saveRecorderOverridesBack(panel);
     }
-    dlg.close();
+    closeOverlay();
     exportWeeklyReport(overrides);
   });
 
-  dlg.showModal();
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
 }
 
-/** 從 dialog 內所有 input[data-recorder-key] 收集覆寫資料 */
-function collectRecorderOverrides() {
+/** 從 container 內所有 input[data-recorder-key] 收集覆寫資料 */
+function collectRecorderOverrides(container) {
+  const root = container || document;
   const overrides = {};
-  document.querySelectorAll("#recorderTableBody input[data-recorder-key]").forEach(input => {
+  root.querySelectorAll("input[data-recorder-key]").forEach(input => {
     overrides[input.dataset.recorderKey] = input.value.trim();
   });
   return overrides;
 }
 
 /** 將紀錄人員覆寫值存回 cases 陣列，並同步 Supabase */
-async function saveRecorderOverridesBack(overrides) {
+async function saveRecorderOverridesBack(container) {
+  const root = container || document;
   const updates = [];
-  document.querySelectorAll("#recorderTableBody input[data-recorder-key]").forEach(input => {
+  root.querySelectorAll("input[data-recorder-key]").forEach(input => {
     const key  = input.dataset.recorderKey;      // date|time|room|id
     const id   = key.split("|").pop();
     const newRecorder = input.value.trim();
