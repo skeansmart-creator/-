@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610g");
+console.log("app.js version: 20260610h");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -882,11 +882,12 @@ function createCaseCard(item, isConflict = false) {
     isSpecial        ? "special"         : "",
     isConflict       ? "conflict"        : "",
     isCommitteeType  ? "committee-type"  : "",
+    isAssocType      ? "assoc-type"      : "",
   ].filter(Boolean).join(" ");
 
   button.type = "button";
   const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
-  const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:700;">協會案件</small>` : "";
+  const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:800;font-size:13px;letter-spacing:0.5px;">協會案件</small>` : "";
   const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`

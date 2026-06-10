@@ -39,6 +39,22 @@
         border-left: 4px solid #7c3aed !important;
         background: #fdf4ff !important;
       }
+      /* ── 協會案件 卡片樣式（青綠色） ── */
+      .case-card.assoc-type {
+        border-left: 4px solid #0d9488 !important;
+        background: #ccfbf1 !important;
+      }
+      .case-card.assoc-type strong {
+        color: #115e59;
+      }
+      .case-card.special.assoc-type {
+        /* 同時是特殊案件 + 協會案件 → 特殊紅優先 */
+        border-left: 4px solid #dc2626 !important;
+        background: #fff5f5 !important;
+      }
+      .case-card.special.assoc-type strong {
+        color: #dc2626;
+      }
       /* ── 摺疊按鈕群組 ── */
       .btn-group {
         position: relative;
@@ -458,6 +474,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260610g"></script>
+    <script src="app.js?v=20260610h"></script>
   </body>
 </html>
