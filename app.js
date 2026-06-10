@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610b");
+console.log("app.js version: 20260610c");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -2228,14 +2228,14 @@ function openRecorderAssignmentDialog() {
   const weekEnd  = addDays(selectedWeekStart, 4);
   const minguo   = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日 ～ ${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
 
-  // 建立/重用 dialog
-  let dlg = document.getElementById("recorderAssignDlg");
-  if (!dlg) {
-    dlg = document.createElement("dialog");
-    dlg.id = "recorderAssignDlg";
-    dlg.style.cssText = "min-width:820px;max-width:95vw;max-height:90vh;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);overflow:hidden;display:flex;flex-direction:column;";
-    document.body.appendChild(dlg);
-  }
+  // 每次都刪除舊 dialog、重建，確保事件綁定乾淨
+  const oldDlg = document.getElementById("recorderAssignDlg");
+  if (oldDlg) oldDlg.remove();
+
+  const dlg = document.createElement("dialog");
+  dlg.id = "recorderAssignDlg";
+  dlg.style.cssText = "min-width:820px;max-width:95vw;max-height:90vh;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);overflow:hidden;display:flex;flex-direction:column;";
+  document.body.appendChild(dlg);
 
   // 依日期分組，建立可編輯表格 HTML
   const byDate = {};
@@ -2282,7 +2282,7 @@ function openRecorderAssignmentDialog() {
     <div style="padding:18px 24px 12px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <h2 style="margin:0;font-size:17px;">列印記錄分配表</h2>
-        <button id="closeRecorderDlg" type="button" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 4px;">×</button>
+        <button type="button" onclick="document.getElementById('recorderAssignDlg').close()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 4px;">×</button>
       </div>
       <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(minguo)}　共 ${rows.length} 件</p>
       <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">可在下方「紀錄人員」欄位直接輸入姓名，修改後再列印或匯出。</p>
@@ -2301,7 +2301,7 @@ function openRecorderAssignmentDialog() {
             <th style="background:#fff3cd;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;min-width:120px;">紀錄人員 ✏️</th>
           </tr>
         </thead>
-        <tbody id="recorderTableBody" style="border:1px solid #e2e8f0;">
+        <tbody id="recorderTableBody">
           ${tableBody}
         </tbody>
       </table>
@@ -2319,16 +2319,9 @@ function openRecorderAssignmentDialog() {
     </div>
   `;
 
-  // 加上 td border（dialog 內的 tbody td）
-  const tbodyCells = dlg.querySelectorAll("#recorderTableBody td");
-  tbodyCells.forEach(td => {
-    if (!td.style.border) td.style.border = "1px solid #e2e8f0";
-  });
+  dlg.querySelector("#cancelRecorderDlg").addEventListener("click", () => dlg.close());
 
-  document.getElementById("closeRecorderDlg").addEventListener("click",  () => dlg.close());
-  document.getElementById("cancelRecorderDlg").addEventListener("click", () => dlg.close());
-
-  document.getElementById("printRecorderTable").addEventListener("click", () => {
+  dlg.querySelector("#printRecorderTable").addEventListener("click", () => {
     const overrides = collectRecorderOverrides();
     const allRows = getFilteredCases().slice().sort((a,b) => a.meetingDate.localeCompare(b.meetingDate) || a.meetingTime.localeCompare(b.meetingTime));
     const printHtml = buildRecorderAssignmentTableHtml(allRows, overrides, true);
@@ -2340,10 +2333,10 @@ function openRecorderAssignmentDialog() {
     setTimeout(() => { win.print(); }, 400);
   });
 
-  document.getElementById("exportWeeklyWithRecorder").addEventListener("click", async () => {
+  dlg.querySelector("#exportWeeklyWithRecorder").addEventListener("click", async () => {
     const overrides = collectRecorderOverrides();
     // 若勾選「儲存回案件資料」，更新 cases 並同步 Supabase
-    if (document.getElementById("recorderSaveBack")?.checked) {
+    if (dlg.querySelector("#recorderSaveBack")?.checked) {
       await saveRecorderOverridesBack(overrides);
     }
     dlg.close();
