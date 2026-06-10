@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610f");
+console.log("app.js version: 20260610g");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -869,14 +869,12 @@ function createCaseCard(item, isConflict = false) {
   const isReserved = item.status === "reserved";
   const isCommitteeType = item.reportCategory === "F";
 
-  // 協會類型 class
-  const assocClassMap = {
-    laborAssocCity:        "assoc-a",
-    laborAssocCounty:      "assoc-b",
-    laborEmploymentAssoc:  "assoc-e",
-    occupationalInjuryAssoc: "assoc-j",
-  };
-  const assocClass = assocClassMap[item.reportCategory] || "";
+  // 協會案件判斷：reportCategory 同時支援字母代碼（A/AH/B/BH/E/EH/J/JH）與長名稱
+  const cat = String(item.reportCategory || "").toUpperCase();
+  const longAssocSet = new Set(["laborAssocCity", "laborAssocCounty", "laborEmploymentAssoc", "occupationalInjuryAssoc"]);
+  const isAssocType =
+    ["A", "AH", "B", "BH", "E", "EH", "J", "JH"].includes(cat) ||
+    longAssocSet.has(item.reportCategory);
 
   button.className = [
     "case-card",
@@ -884,33 +882,23 @@ function createCaseCard(item, isConflict = false) {
     isSpecial        ? "special"         : "",
     isConflict       ? "conflict"        : "",
     isCommitteeType  ? "committee-type"  : "",
-    assocClass,
   ].filter(Boolean).join(" ");
 
   button.type = "button";
-  const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
-  const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
+  const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
+  const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:700;">協會案件</small>` : "";
+  const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
     : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
   const workerLine = isReserved
     ? `<small style="color:#6b7280;">待補：案號、勞資雙方</small>`
     : `<small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>`;
-  // 協會標籤
-  const assocLabelMap = {
-    laborAssocCity:          "A協會",
-    laborAssocCounty:        "B協會",
-    laborEmploymentAssoc:    "E協會",
-    occupationalInjuryAssoc: "J協會",
-  };
-  const assocLabel = assocLabelMap[item.reportCategory]
-    ? `<small style="font-weight:700;">${escapeHtml(assocLabelMap[item.reportCategory])}</small>`
-    : "";
   button.innerHTML = `
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${assocLabel}${conflictTag}${specialTag}
+    ${conflictTag}${assocTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
