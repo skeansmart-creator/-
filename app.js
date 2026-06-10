@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610h");
+console.log("app.js version: 20260610k");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -889,6 +889,9 @@ function createCaseCard(item, isConflict = false) {
   const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
   const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:800;font-size:13px;letter-spacing:0.5px;">協會案件</small>` : "";
   const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
+  const recorderTag = item.recorder
+    ? `<small style="color:#1d4ed8;font-weight:600;">📝 ${escapeHtml(item.recorder)}</small>`
+    : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
     : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
@@ -899,7 +902,7 @@ function createCaseCard(item, isConflict = false) {
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${conflictTag}${assocTag}${specialTag}
+    ${recorderTag}${conflictTag}${assocTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
@@ -2343,15 +2346,11 @@ function openRecorderAssignmentDialog() {
       </table>
     </div>
     <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
-      <div style="flex:1;min-width:200px;">
-        <label style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="recorderSaveBack" style="width:14px;height:14px;" />
-          儲存紀錄人員修改回案件資料
-        </label>
-      </div>
+      <span id="recorderSaveHint" style="flex:1;min-width:160px;font-size:12px;color:#9ca3af;">填入後請按右側「💾 儲存」</span>
       <button id="recorderCancelBtn" type="button" class="secondary-button">取消</button>
+      <button id="recorderSaveBtn" type="button" class="primary-button" style="min-width:110px;background:#059669;border-color:#059669;">💾 儲存</button>
       <button id="recorderPrintBtn" type="button" class="secondary-button" style="min-width:120px;">🖨 列印分配表</button>
-      <button id="recorderExportBtn" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報（含分配表）</button>
+      <button id="recorderExportBtn" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報</button>
     </div>
   `;
 
@@ -2359,7 +2358,39 @@ function openRecorderAssignmentDialog() {
   panel.querySelector("#recorderCloseBtnX").addEventListener("click", closeOverlay);
   panel.querySelector("#recorderCancelBtn").addEventListener("click", closeOverlay);
 
-  panel.querySelector("#recorderPrintBtn").addEventListener("click", () => {
+  // 💾 儲存按鈕：儲存後不關閉視窗，顯示成功訊息
+  panel.querySelector("#recorderSaveBtn").addEventListener("click", async (e) => {
+    const btn  = e.currentTarget;
+    const hint = panel.querySelector("#recorderSaveHint");
+    btn.disabled = true;
+    btn.textContent = "儲存中…";
+    try {
+      const updatedCount = await saveRecorderOverridesBack(panel);
+      // 明顯的 toast 提示
+      showToast(updatedCount > 0
+        ? `✓ 已儲存 ${updatedCount} 筆紀錄人員修改`
+        : "沒有變更可儲存", updatedCount > 0 ? "success" : "info");
+      hint.textContent = updatedCount > 0
+        ? `✓ 上次儲存：${updatedCount} 筆（${new Date().toLocaleTimeString("zh-TW", {hour12:false})}）`
+        : "沒有變更可儲存";
+      hint.style.color = updatedCount > 0 ? "#059669" : "#9ca3af";
+      btn.textContent = "✓ 已儲存";
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "💾 儲存";
+      }, 1500);
+    } catch (err) {
+      showToast(`儲存失敗：${err.message}`, "error");
+      hint.textContent = `儲存失敗：${err.message}`;
+      hint.style.color = "#dc2626";
+      btn.disabled = false;
+      btn.textContent = "💾 儲存";
+    }
+  });
+
+  // 🖨 列印：自動儲存後再列印
+  panel.querySelector("#recorderPrintBtn").addEventListener("click", async () => {
+    await saveRecorderOverridesBack(panel);
     const overrides = collectRecorderOverrides(panel);
     const allRows = getFilteredCases()
       .filter(item => !["withdrawn","cancelled"].includes(item.status))
@@ -2374,11 +2405,10 @@ function openRecorderAssignmentDialog() {
     setTimeout(() => { win.print(); }, 400);
   });
 
+  // 📄 產出週報：自動儲存後再匯出
   panel.querySelector("#recorderExportBtn").addEventListener("click", async () => {
+    await saveRecorderOverridesBack(panel);
     const overrides = collectRecorderOverrides(panel);
-    if (panel.querySelector("#recorderSaveBack").checked) {
-      await saveRecorderOverridesBack(panel);
-    }
     closeOverlay();
     exportWeeklyReport(overrides);
   });
@@ -2397,7 +2427,7 @@ function collectRecorderOverrides(container) {
   return overrides;
 }
 
-/** 將紀錄人員覆寫值存回 cases 陣列，並同步 Supabase */
+/** 將紀錄人員覆寫值存回 cases 陣列，並同步 Supabase。回傳更新筆數 */
 async function saveRecorderOverridesBack(container) {
   const root = container || document;
   const updates = [];
@@ -2417,6 +2447,54 @@ async function saveRecorderOverridesBack(container) {
     await saveRemoteCase(item);
   }
   if (updates.length) render();
+  return updates.length;
+}
+
+// ── Toast 全螢幕通知 ──────────────────────────────────────
+function showToast(message, type = "success") {
+  // 移除舊 toast
+  const old = document.getElementById("appToast");
+  if (old) old.remove();
+
+  const colorMap = {
+    success: { bg: "#059669", icon: "✓" },
+    error:   { bg: "#dc2626", icon: "✕" },
+    info:    { bg: "#3b82f6", icon: "ℹ" },
+  };
+  const { bg } = colorMap[type] || colorMap.info;
+
+  const toast = document.createElement("div");
+  toast.id = "appToast";
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: ${bg};
+    color: #fff;
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+  `;
+  document.body.appendChild(toast);
+
+  // 觸發入場動畫
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateX(-50%) translateY(4px)";
+  });
+
+  // 3 秒後淡出
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => toast.remove(), 300);
+  }, 2700);
 }
 
 // ── 摺疊按鈕群組 ──────────────────────────────────────────
