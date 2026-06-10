@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610e");
+console.log("app.js version: 20260610f");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -2433,21 +2433,26 @@ async function saveRecorderOverridesBack(container) {
 // ── 摺疊按鈕群組 ──────────────────────────────────────────
 function toggleBtnGroup(toggleBtn) {
   const menu = toggleBtn.nextElementSibling;
-  const isOpen = !menu.hidden;
-  // 先關閉所有其他群組
+  const isOpen = menu.classList.contains("open");
+
+  // 先關閉所有群組
   document.querySelectorAll(".btn-group-menu").forEach(m => {
-    m.hidden = true;
-    if (m.previousElementSibling) m.previousElementSibling.setAttribute("aria-expanded", "false");
+    m.classList.remove("open");
   });
-  // 切換目前群組
+  document.querySelectorAll(".btn-group-toggle").forEach(b => {
+    b.setAttribute("aria-expanded", "false");
+  });
+
+  // 若原本是關閉狀態，則開啟
   if (!isOpen) {
-    menu.hidden = false;
+    menu.classList.add("open");
     toggleBtn.setAttribute("aria-expanded", "true");
-    // 點擊頁面其他地方關閉
+
+    // 點擊選單外任何地方關閉
     setTimeout(() => {
       document.addEventListener("click", function closeMenu(e) {
         if (!toggleBtn.closest(".btn-group").contains(e.target)) {
-          menu.hidden = true;
+          menu.classList.remove("open");
           toggleBtn.setAttribute("aria-expanded", "false");
           document.removeEventListener("click", closeMenu);
         }

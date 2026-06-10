@@ -72,6 +72,7 @@
         white-space: nowrap;
       }
       .btn-group-menu {
+        display: none;
         position: absolute;
         top: calc(100% + 4px);
         right: 0;
@@ -81,10 +82,11 @@
         box-shadow: 0 6px 20px rgba(0,0,0,.13);
         min-width: 180px;
         z-index: 500;
-        display: flex;
         flex-direction: column;
         padding: 6px 0;
-        gap: 0;
+      }
+      .btn-group-menu.open {
+        display: flex;
       }
       .btn-group-menu button {
         display: block;
@@ -125,7 +127,7 @@
                   onclick="toggleBtnGroup(this)" aria-expanded="false">
             排程作業 ▾
           </button>
-          <div class="btn-group-menu" hidden>
+          <div class="btn-group-menu">
             <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
             <button id="importAssocBtn" type="button">協會匯入案件 Excel</button>
             <button id="setRooms"       type="button">⚙ 設定可用會議室</button>
@@ -139,7 +141,7 @@
                   onclick="toggleBtnGroup(this)" aria-expanded="false">
             列印作業 ▾
           </button>
-          <div class="btn-group-menu" hidden>
+          <div class="btn-group-menu">
             <button id="exportWeeklyReport" type="button">列印記錄分配表</button>
             <button id="exportCsv"          type="button">匯出報表 CSV</button>
           </div>
@@ -151,7 +153,7 @@
                   onclick="toggleBtnGroup(this)" aria-expanded="false">
             資料作業 ▾
           </button>
-          <div class="btn-group-menu" hidden>
+          <div class="btn-group-menu">
             <button id="backupData"  type="button">備份資料</button>
             <input  id="restoreInput" type="file" accept=".json" style="display:none" />
             <button id="restoreData" type="button">還原備份</button>
@@ -477,6 +479,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260610e"></script>
+    <script src="app.js?v=20260610f"></script>
   </body>
 </html>
