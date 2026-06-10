@@ -1,4 +1,4 @@
-console.log("app.js version: 20260529a");
+console.log("app.js version: 20260610a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -184,8 +184,7 @@ document.querySelector("#restoreInput").addEventListener("change", restoreData);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
-document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
-document.querySelector("#printRecorderSheet").addEventListener("click", printRecorderSheet);
+document.querySelector("#exportWeeklyReport").addEventListener("click", openRecorderAssignmentDialog);
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
@@ -224,19 +223,6 @@ elements.deleteCase.addEventListener("click", deleteCurrentCase);
 document.querySelector("#meetingDate").addEventListener("change", updateRoomSelect);
 document.querySelector("#meetingTime").addEventListener("change", updateRoomSelect);
 document.querySelector("#room").addEventListener("change", toggleOtherRoom);
-
-// ── 按鈕群組下拉選單 ─────────────────────────────────────────
-function toggleBtnGroup(btn) {
-  const menu = btn.nextElementSibling;
-  const isHidden = menu.hidden;
-  document.querySelectorAll(".group-menu").forEach(m => { m.hidden = true; });
-  menu.hidden = !isHidden;
-}
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".btn-group")) {
-    document.querySelectorAll(".group-menu").forEach(m => { m.hidden = true; });
-  }
-});
 
 initialize();
 
@@ -803,6 +789,10 @@ function renderIntakeList() {
 
 function renderCalendar(weekDates, filtered) {
   elements.calendar.innerHTML = "";
+  elements.calendar.append(createCell("", "day-head"));
+  weekDates.forEach((date, index) => {
+    elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
+  });
 
   const roomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(二)", "晤談室(三)", "勞資爭議調解會議室"];
   const roomRank = (item) => {
@@ -811,23 +801,7 @@ function renderCalendar(weekDates, filtered) {
     return idx >= 0 ? idx : roomOrder.length;
   };
 
-  // 動態時段：固定四個 + 當週有案件的其他時間，合併排序
-  const extraSlots = [...new Set(filtered.map(item => item.meetingTime))]
-    .filter(t => t && !timeSlots.includes(t));
-  const allSlots = [...timeSlots, ...extraSlots].sort();
-
-  // 動態設定 grid 欄數（時段欄 + 5天）與列數（標題列 + 各時段列）
-  elements.calendar.style.gridTemplateColumns = "80px repeat(5, 1fr)";
-  elements.calendar.style.gridTemplateRows =
-    `auto ${allSlots.map(() => "auto").join(" ")}`;
-
-  // 標題列
-  elements.calendar.append(createCell("", "day-head"));
-  weekDates.forEach((date, index) => {
-    elements.calendar.append(createCell(`${weekdayNames[index]} ${formatMonthDay(date)}`, "day-head"));
-  });
-
-  // 建立衝突 key set
+  // 建立衝突 key set：同日期+時段+地點出現 2 筆以上視為衝突
   const slotRoomCount = {};
   filtered.forEach(item => {
     const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
@@ -835,11 +809,8 @@ function renderCalendar(weekDates, filtered) {
   });
   const conflictKeys = new Set(Object.keys(slotRoomCount).filter(k => slotRoomCount[k] > 1));
 
-  allSlots.forEach((slot) => {
-    const isExtra = !timeSlots.includes(slot);
-    const timeCell = createCell(slot, "time-cell");
-    if (isExtra) timeCell.style.cssText += ";color:#b45309;font-style:italic;";
-    elements.calendar.append(timeCell);
+  timeSlots.forEach((slot) => {
+    elements.calendar.append(createCell(slot, "time-cell"));
     weekDates.forEach((date) => {
       const cell = createCell("", "calendar-cell");
       const dateKey = toDateInputValue(date);
@@ -887,22 +858,12 @@ function createCaseCard(item, isConflict = false) {
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
   const isReserved = item.status === "reserved";
   const isCommitteeType = item.reportCategory === "F";
-  const cat = (item.reportCategory || "").trim().toUpperCase();
-  const isAssocType = ["A", "AH", "E", "EH", "J", "JH",
-    "laborAssocCity", "laborAssocCounty", "laborEmploymentAssoc", "occupationalInjuryAssoc"
-  ].includes(cat) || ["laborAssocCity","laborAssocCounty","laborEmploymentAssoc","occupationalInjuryAssoc"].includes(item.reportCategory);
-  button.className = [
-    "case-card",
-    item.status,
-    isSpecial       ? "special"         : "",
-    isConflict      ? "conflict"        : "",
-    isCommitteeType ? "committee-type"  : "",
-    isAssocType     ? "assoc-type"      : "",
-  ].filter(Boolean).join(" ");
+  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
   button.type = "button";
-  const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
-  const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
-  const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:700;">協會案件</small>` : "";
+  // 衝期標示：橘色，放在 specialTag 前
+  const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
+  // 特殊案件：紅色字「特殊案件」固定顯示在最下方
+  const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
     : `<strong>${escapeHtml(item.caseNo)} ${escapeHtml(statusLabels[item.status])}</strong>`;
@@ -913,7 +874,7 @@ function createCaseCard(item, isConflict = false) {
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${conflictTag}${assocTag}${specialTag}
+    ${conflictTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
@@ -1362,9 +1323,7 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-async function exportWeeklyReport() {
-  const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
-
+function exportWeeklyReport(recorderOverrides) {
   // 地點排序
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
   const weekRoomRank = (item) => {
@@ -1384,12 +1343,20 @@ async function exportWeeklyReport() {
     });
 
   const weekEnd = addDays(selectedWeekStart, 4);
+  const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
+  const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
-  const wb = XLSX.utils.book_new();
 
-  // ── 工作表一：週報明細 ────────────────────────────────────
-  const detailHeader = ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"];
-  const detailData = rows.map((item) => [
+  // 若有傳入 recorderOverrides，使用覆寫的紀錄人員
+  const getRecorder = (item) => {
+    if (recorderOverrides) {
+      const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
+      return recorderOverrides[key] !== undefined ? recorderOverrides[key] : item.recorder;
+    }
+    return item.recorder;
+  };
+
+  const detailRows = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
@@ -1399,312 +1366,61 @@ async function exportWeeklyReport() {
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
     item.owner,
     getMediatorDisplay(item),
-    item.recorder,
-    item.notes ?? "",
+    getRecorder(item),
+    item.notes,
   ]);
-  const titleRow = [`勞資爭議調解(仲裁)會議週報表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${rows.length} 件`];
-  const ws1 = XLSX.utils.aoa_to_sheet([titleRow, detailHeader, ...detailData]);
-  ws1["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: detailHeader.length - 1 } }];
-  ws1["!cols"] = [
-    { wch: 14 }, { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 14 },
-    { wch: 18 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 8 }, { wch: 24 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws1, "週報明細");
 
-  // ── 工作表二：件數統計 ────────────────────────────────────
-  const countHeader = ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區",
-    "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會",
-    "本局召開案件數", "男", "女", "中高齡"];
-  const countRow = [
-    `${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`,
-    counts.mediator, counts.committee, counts.arbitration, counts.transfer,
-    counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc,
-    counts.occupationalInjuryAssoc, counts.bureau,
-    counts.male, counts.female, counts.middleAged,
-  ];
-  const ws2 = XLSX.utils.aoa_to_sheet([countHeader, countRow]);
-  ws2["!cols"] = countHeader.map((_, i) => ({ wch: i === 0 ? 28 : 10 }));
-  XLSX.utils.book_append_sheet(wb, ws2, "件數統計");
+  const detailTable = tableHtml([
+    ["開會日期", "星期", "地點", "開會時間", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "備註"],
+    ...detailRows,
+  ]);
+  const countTable = tableHtml([
+    ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
+    [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
+  ]);
 
-  // ── 工作表三：紀錄分配表 ─────────────────────────────────
-  const activeRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
-  const recorderMap = {};
-  activeRows.forEach(item => {
-    const rec = (item.recorder || "（未指定）").trim() || "（未指定）";
-    if (!recorderMap[rec]) recorderMap[rec] = [];
-    recorderMap[rec].push(item);
-  });
-  const sortedRecorders = Object.keys(recorderMap).sort((a, b) => {
-    if (a === "（未指定）") return 1;
-    if (b === "（未指定）") return -1;
-    return a.localeCompare(b, "zh-Hant");
-  });
+  // 紀錄分配表 HTML（用於週報匯出）
+  const recorderTableHtml = buildRecorderAssignmentTableHtml(rows, recorderOverrides, false);
 
-  const recHeader = ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "調解人", "承辦人", "狀態", "備註"];
-  const ws3Data = [
-    [`紀錄人員分配表　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　有效案件 ${activeRows.length} 件`],
-  ];
-  sortedRecorders.forEach(rec => {
-    const items = recorderMap[rec];
-    // 紀錄人員標題列
-    ws3Data.push([`【紀錄：${rec}】　共 ${items.length} 件`]);
-    ws3Data.push(recHeader);
-    items.forEach(item => {
-      ws3Data.push([
-        formatDate(parseDate(item.meetingDate)),
-        getWeekdayName(parseDate(item.meetingDate)),
-        item.meetingTime,
-        displayRoom(item),
-        item.caseNo,
-        item.worker,
-        item.employer,
-        item.disputeType,
-        getMediatorDisplay(item),
-        item.owner,
-        statusLabels[item.status] || item.status,
-        item.notes ?? "",
-      ]);
-    });
-    ws3Data.push([]); // 空行分隔
-  });
-  const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
-  ws3["!cols"] = [
-    { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 16 }, { wch: 14 },
-    { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 24 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws3, "紀錄分配表");
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: "Microsoft JhengHei", Arial, sans-serif; }
+          h1 { text-align: center; font-size: 20px; }
+          .meta { display: flex; justify-content: space-between; margin: 8px 0 12px; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+          th, td { border: 1px solid #333; padding: 6px; font-size: 12px; vertical-align: middle; }
+          th { background: #e8eef5; font-weight: 700; text-align: center; }
+          .count-title { font-weight: 700; margin-top: 20px; }
+          .section-title { font-weight: 700; margin-top: 28px; margin-bottom: 8px; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+          .page-break { page-break-before: always; }
+        </style>
+      </head>
+      <body>
+        <h1>勞資爭議調解(仲裁)會議週報表</h1>
+        <div class="meta">
+          <span>日期：${escapeHtml(reportTitle)}</span>
+          <span>案件數：共${rows.length}件</span>
+          <span>本週派案人員：${escapeHtml(dispatcher)}</span>
+        </div>
+        ${detailTable}
+        <div class="count-title">件數統計</div>
+        ${countTable}
+        <div class="section-title page-break">勞資爭議調解紀錄分配表</div>
+        ${recorderTableHtml}
+      </body>
+    </html>
+  `;
 
-  // ── 工作表四：其他地點排程 ───────────────────────────────
-  const fixedRoomSet = new Set(fixedRooms);
-  const otherRoomRows = rows.filter(item => !fixedRoomSet.has(displayRoom(item)));
-  const otherHeader = ["開會日期", "星期", "開會時間", "地點", "案號", "勞方", "資方", "主要爭議", "承辦人", "調解人", "紀錄", "狀態", "備註"];
-  const ws4Data = [
-    [`其他地點排程　${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}　共 ${otherRoomRows.length} 件`],
-    otherRoomRows.length === 0 ? ["（本週無其他地點排程）"] : otherHeader,
-    ...otherRoomRows.map(item => [
-      formatDate(parseDate(item.meetingDate)),
-      getWeekdayName(parseDate(item.meetingDate)),
-      item.meetingTime,
-      displayRoom(item),
-      item.caseNo,
-      item.worker,
-      item.employer,
-      item.disputeType,
-      item.owner,
-      getMediatorDisplay(item),
-      item.recorder,
-      statusLabels[item.status] || item.status,
-      item.notes ?? "",
-    ]),
-  ];
-  const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
-  ws4["!cols"] = [
-    { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 16 }, { wch: 14 },
-    { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 24 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws4, "其他地點排程");
-
-  // ── 下載 ──────────────────────────────────────────────────
-  XLSX.writeFile(wb, `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xlsx`);
-}
-
-// ── 列印紀錄分配表 ────────────────────────────────────────────
-function printRecorderSheet() {
-  const weekDates = Array.from({ length: 5 }, (_, i) => addDays(selectedWeekStart, i));
-  const weekEnd   = addDays(selectedWeekStart, 4);
-
-  // 只抓 H / F 案件（及舊版字串格式），排除撤回/取消
-  const targetRows = cases.filter(item => {
-    if (["withdrawn", "cancelled"].includes(item.status)) return false;
-    const date = parseDate(item.meetingDate);
-    if (date < selectedWeekStart || date > weekEnd) return false;
-    const cat = (item.reportCategory || "").trim();
-    return cat === "H" || cat === "F" || cat === "mediator" || cat === "committee";
-  });
-
-  if (!targetRows.length) {
-    alert("本週沒有需要派紀錄的 H/F 案件。");
-    return;
-  }
-
-  // 固定會議室順序
-  const fixedRoomOrder = ["晤談室(一)", "晤談室(二)", "晤談室(三)", "晤談室(四)", "勞資爭議調解會議室"];
-
-  // 建立完整查找 map（含其他地點）
-  const lookup = {};
-  targetRows.forEach(item => {
-    const r = displayRoom(item); // 包含 roomOther
-    if (!lookup[r]) lookup[r] = {};
-    if (!lookup[r][item.meetingDate]) lookup[r][item.meetingDate] = {};
-    if (!lookup[r][item.meetingDate][item.meetingTime]) lookup[r][item.meetingDate][item.meetingTime] = [];
-    lookup[r][item.meetingDate][item.meetingTime].push(item);
-  });
-
-  // 有案件的固定會議室
-  const activeFixed = fixedRoomOrder.filter(r => lookup[r]);
-  // 有案件的其他地點（不在固定列表裡的）
-  const activeOther = Object.keys(lookup).filter(r => !fixedRoomOrder.includes(r)).sort();
-
-  if (!activeFixed.length && !activeOther.length) {
-    alert("本週沒有 H/F 案件。");
-    return;
-  }
-
-  // ── 彈出選取視窗 ─────────────────────────────────────────
-  let dlg = document.getElementById("printRoomSelectDlg");
-  if (dlg) dlg.remove(); // 每次重建確保選項最新
-
-  dlg = document.createElement("dialog");
-  dlg.id = "printRoomSelectDlg";
-  dlg.style.cssText = "min-width:340px;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);";
-
-  const fixedChecks = activeFixed.map(r =>
-    `<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:14px;">
-      <input type="checkbox" value="${escapeHtml(r)}" checked style="width:16px;height:16px;cursor:pointer;">
-      ${escapeHtml(r)}
-    </label>`
-  ).join("");
-
-  const otherChecks = activeOther.length ? `
-    <div style="margin-top:12px;font-weight:700;font-size:13px;color:#6b7280;margin-bottom:4px;">其他地點</div>
-    ${activeOther.map(r =>
-      `<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:14px;">
-        <input type="checkbox" value="${escapeHtml(r)}" checked style="width:16px;height:16px;cursor:pointer;">
-        ${escapeHtml(r)}
-      </label>`
-    ).join("")}` : "";
-
-  dlg.innerHTML = `
-    <div style="padding:20px 24px 0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 style="margin:0;font-size:16px;">選擇要列印的地點</h2>
-        <button id="closePrintRoomDlg" type="button"
-          style="background:none;border:none;font-size:22px;cursor:pointer;color:#666;line-height:1;">×</button>
-      </div>
-      <div style="font-size:13px;color:#666;margin-bottom:12px;">只列出本週有 H/F 案件的地點，可自行勾選。</div>
-      <div style="font-weight:700;font-size:13px;color:#6b7280;margin-bottom:4px;">固定會議室</div>
-      ${fixedChecks}
-      ${otherChecks}
-    </div>
-    <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e5e7eb;margin-top:16px;">
-      <button id="cancelPrintRoomDlg" type="button" class="secondary-button">取消</button>
-      <button id="confirmPrintRoomDlg" type="button" class="primary-button">列印</button>
-    </div>`;
-  document.body.appendChild(dlg);
-
-  document.getElementById("closePrintRoomDlg").onclick  = () => dlg.close();
-  document.getElementById("cancelPrintRoomDlg").onclick = () => dlg.close();
-  document.getElementById("confirmPrintRoomDlg").onclick = () => {
-    const selected = Array.from(dlg.querySelectorAll("input[type=checkbox]:checked")).map(cb => cb.value);
-    dlg.close();
-    if (!selected.length) { alert("請至少勾選一個地點。"); return; }
-    _doPrintRecorderSheet(selected, lookup, weekDates, weekEnd, fixedRoomOrder);
-  };
-
-  dlg.showModal();
-}
-
-function _doPrintRecorderSheet(selectedRooms, lookup, weekDates, weekEnd, fixedRoomOrder) {
-  const slots    = ["09:00", "10:30", "13:30", "15:00"];
-  const dayNames = ["週一", "週二", "週三", "週四", "週五"];
-
-  // 依照固定順序 + 其他地點順序排列選取的房間
-  const orderedRooms = [
-    ...fixedRoomOrder.filter(r => selectedRooms.includes(r)),
-    ...selectedRooms.filter(r => !fixedRoomOrder.includes(r)).sort(),
-  ];
-
-  // 民國日期標題
-  const mingStart = toMinguoDate(selectedWeekStart);
-  const mingEnd   = toMinguoDate(weekEnd);
-  const titleDate = mingStart.slice(0,3) + "-" + mingStart.slice(3,5) + "-" + mingStart.slice(5) +
-                    " ～ " + mingEnd.slice(0,3) + "-" + mingEnd.slice(3,5) + "-" + mingEnd.slice(5);
-
-  const roomBlocks = orderedRooms.map((room, roomIdx) => {
-    const isLast = roomIdx === orderedRooms.length - 1;
-
-    const thCells = dayNames.map((name, di) => {
-      const d = weekDates[di];
-      return `<th>${name}<br><span style="font-weight:400;">${d.getMonth()+1}/${d.getDate()}</span></th>`;
-    }).join("");
-
-    const slotRows = slots.map(slot => {
-      const tds = weekDates.map(date => {
-        const dateKey = toDateInputValue(date);
-        const items   = lookup[room]?.[dateKey]?.[slot] || [];
-        if (!items.length) return `<td></td>`;
-        const cells = items.map(item => {
-          const mediator = getMediatorDisplay(item) || "";
-          const recorder = (item.recorder || "").trim();
-          return [
-            `<div class="c-caseno">${escapeHtml(item.caseNo)}</div>`,
-            mediator ? `<div class="c-mediator">${escapeHtml(mediator)}</div>` : "",
-            `<div class="c-owner">${escapeHtml(item.owner)}</div>`,
-            recorder
-              ? `<div class="c-recorder">紀錄：<span class="c-recorder-name">${escapeHtml(recorder)}</span></div>`
-              : `<div class="c-recorder">紀錄：<span class="fill-line"></span></div>`,
-          ].join("");
-        }).join('<hr class="item-sep">');
-        return `<td>${cells}</td>`;
-      }).join("");
-      return `<tr><td class="slot-cell">${slot}</td>${tds}</tr>`;
-    }).join("");
-
-    return `
-      <div class="room-block${isLast ? "" : " page-break"}">
-        <h2>${escapeHtml(room)}</h2>
-        <table>
-          <thead><tr><th class="slot-head">時段</th>${thCells}</tr></thead>
-          <tbody>${slotRows}</tbody>
-        </table>
-      </div>`;
-  }).join("");
-
-  const html = `<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8"/>
-  <title>紀錄分配表</title>
-  <style>
-    @page { size: A4 landscape; margin: 8mm; }
-    * { box-sizing: border-box; }
-    body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
-    .no-print { text-align: right; padding: 6px 12px; }
-    @media print { .no-print { display: none; } }
-    h1 { text-align: center; font-size: 16px; font-weight: 700; margin: 6px 0 10px; color: #000; }
-    .room-block { width: 277mm; margin: 0 auto; }
-    .page-break { page-break-after: always; }
-    h2 { font-size: 15px; font-weight: 700; color: #000; margin: 0 0 6px;
-         padding: 4px 10px; background: #d9e8fb; border-left: 5px solid #2563eb; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td { border: 2px solid #555; padding: 4px 5px; vertical-align: top; font-size: 13px; color: #000; }
-    th { background: #e8eef5; font-weight: 700; font-size: 14px; text-align: center; color: #000; }
-    .slot-head { width: 48px; text-align: center; }
-    .slot-cell { text-align: center; font-weight: 700; font-size: 14px; color: #000; background: #f8fafc; }
-    .c-caseno   { font-size: 15px; font-weight: 700; color: #000; margin-bottom: 2px; }
-    .c-mediator { font-size: 14px; font-weight: 700; color: #003399; margin-bottom: 2px; }
-    .c-owner    { font-size: 13px; font-weight: 700; color: #111; margin-bottom: 4px; }
-    .c-recorder { font-size: 12px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 4px; }
-    .c-recorder-name { font-size: 13px; font-weight: 700; color: #000; text-decoration: underline; }
-    .fill-line  { flex: 1; border-bottom: 2px solid #333; display: inline-block; min-width: 60px; }
-    .item-sep   { border: none; border-top: 1px dashed #aaa; margin: 3px 0; }
-    td { min-height: 60px; }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <button onclick="window.print()" style="font-size:15px;padding:6px 20px;cursor:pointer;
-      background:#2563eb;color:#fff;border:none;border-radius:6px;">🖨 列印</button>
-  </div>
-  <h1>勞資爭議調解紀錄分配表　${escapeHtml(titleDate)}</h1>
-  ${roomBlocks}
-</body>
-</html>`;
-
-  const win = window.open("", "_blank");
-  if (!win) { alert("請允許彈出視窗後再試。"); return; }
-  win.document.write(html);
-  win.document.close();
+  const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `勞資爭議調解會議週報表_${toDateInputValue(selectedWeekStart)}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function handleWeekChange(event) {
@@ -1840,23 +1556,8 @@ function buildWeeklyCounts(rows) {
   counts.male = 0;
   counts.female = 0;
   counts.middleAged = 0;
-  // 新版 reportCategory 存英文代碼（A/B/E/F/H/J…），需先轉換成統計 key
-  const codeToKey = {
-    A: "laborAssocCity", AH: "laborAssocCity",
-    B: "laborAssocCounty", BH: "laborAssocCounty",
-    E: "laborEmploymentAssoc", EH: "laborEmploymentAssoc",
-    J: "occupationalInjuryAssoc", JH: "occupationalInjuryAssoc",
-    H: "mediator",
-    F: "committee",
-    I: "arbitration",
-    G: "transfer",
-  };
   rows.forEach((item) => {
-    const raw = (item.reportCategory || "").trim();
-    // 若已是舊版長字串 key（如 "mediator"），直接用；否則查代碼表
-    const key = Object.prototype.hasOwnProperty.call(reportCategoryLabels, raw)
-      ? raw
-      : (codeToKey[raw] || reportCategoryFromMethod(raw) || "mediator");
+    const key = item.reportCategory || "mediator";
     counts[key] = (counts[key] || 0) + 1;
     counts.male += toNumber(item.maleCount) || inferGenderCount(item.workerGender, "男");
     counts.female += toNumber(item.femaleCount) || inferGenderCount(item.workerGender, "女");
@@ -2363,4 +2064,303 @@ function fixSheetRef(ws) {
   if (maxRow > parseInt(refMatch[4])) {
     ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
   }
+}
+
+// ══════════════════════════════════════════════════════════
+// 紀錄分配表 Dialog
+// ══════════════════════════════════════════════════════════
+
+/**
+ * 建立紀錄分配表 HTML（靜態，用於列印 / 週報匯出）
+ * @param {Array}  rows             - 已排序的案件陣列
+ * @param {Object} recorderOverrides - { key: recorderName } 覆寫紀錄人員
+ * @param {boolean} forPrint        - true → 輸出帶有列印樣式的完整 HTML 頁面；false → 只回傳 table HTML
+ */
+function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
+  const weekEnd = addDays(selectedWeekStart, 4);
+  const minguo  = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日～${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
+
+  // 只顯示有效案件（排除撤回/取消）
+  const validRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
+
+  // 依日期分組
+  const byDate = {};
+  validRows.forEach(item => {
+    if (!byDate[item.meetingDate]) byDate[item.meetingDate] = [];
+    byDate[item.meetingDate].push(item);
+  });
+
+  const getRecorder = (item) => {
+    if (recorderOverrides) {
+      const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
+      return recorderOverrides[key] !== undefined ? recorderOverrides[key] : (item.recorder || "");
+    }
+    return item.recorder || "";
+  };
+
+  // 計算每一天的 rowspan
+  let tableRows = "";
+  const sortedDates = Object.keys(byDate).sort();
+
+  sortedDates.forEach(dateKey => {
+    const dayItems = byDate[dateKey];
+    const dateObj  = parseDate(dateKey);
+    const dateLabel = `${formatDate(dateObj)}（${getWeekdayName(dateObj)}）`;
+
+    dayItems.forEach((item, idx) => {
+      const recorder = getRecorder(item);
+      const isFirst  = idx === 0;
+      const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
+      const specialMark = isSpecial ? `<span style="color:#dc2626;font-weight:700;">★</span> ` : "";
+      tableRows += `<tr>
+        ${isFirst ? `<td rowspan="${dayItems.length}" style="text-align:center;font-weight:700;background:#f0f4fa;white-space:nowrap;">${escapeHtml(dateLabel)}</td>` : ""}
+        <td style="text-align:center;">${escapeHtml(item.meetingTime)}</td>
+        <td style="text-align:center;">${escapeHtml(displayRoom(item))}</td>
+        <td>${escapeHtml(item.caseNo || "")}</td>
+        <td>${escapeHtml(item.worker || "")}</td>
+        <td>${escapeHtml(item.employer || "")}</td>
+        <td style="text-align:center;">${specialMark}${escapeHtml(getMediatorDisplay(item))}</td>
+        <td style="text-align:center;font-weight:600;color:#1d4ed8;">${escapeHtml(recorder)}</td>
+      </tr>`;
+    });
+  });
+
+  if (!tableRows) {
+    tableRows = `<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:20px;">本週無有效案件</td></tr>`;
+  }
+
+  const tableHtmlStr = `
+    <table style="border-collapse:collapse;width:100%;font-size:12px;">
+      <thead>
+        <tr style="background:#dde6f0;">
+          <th style="border:1px solid #333;padding:7px 10px;text-align:center;">日期</th>
+          <th style="border:1px solid #333;padding:7px 6px;text-align:center;white-space:nowrap;">時間</th>
+          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">地點</th>
+          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">案號</th>
+          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">勞方</th>
+          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">資方</th>
+          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">調解人</th>
+          <th style="border:1px solid #333;padding:7px 10px;text-align:center;">紀錄人員</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+  `;
+
+  // 套用 border 到所有 td
+  const styledTable = tableHtmlStr.replace(/<td /g, '<td style="border:1px solid #333;padding:6px 8px;vertical-align:middle;" ').replace(/style="border[^"]*" style="/g, 'style="');
+
+  if (!forPrint) return styledTable;
+
+  return `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>勞資爭議調解紀錄分配表</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: "Microsoft JhengHei", "標楷體", Arial, sans-serif; margin: 20px 28px; color: #111; }
+    h1 { text-align: center; font-size: 18px; margin-bottom: 4px; }
+    .subtitle { text-align: center; font-size: 13px; color: #555; margin-bottom: 16px; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th { background: #dde6f0; border: 1px solid #333; padding: 7px 8px; text-align: center; font-weight: 700; }
+    td { border: 1px solid #333; padding: 6px 8px; vertical-align: middle; }
+    .note { font-size: 11px; color: #666; margin-top: 14px; }
+    @media print {
+      body { margin: 10mm 14mm; }
+      @page { size: A4 landscape; margin: 12mm; }
+      button, .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <h1>勞資爭議調解紀錄分配表</h1>
+  <div class="subtitle">${escapeHtml(minguo)}</div>
+  ${styledTable}
+  <div class="note">★ 特殊案件　　製表日期：${formatDate(new Date())}</div>
+</body>
+</html>`;
+}
+
+/**
+ * 開啟「列印記錄分配表」互動 Dialog
+ * 讓使用者在匯出/列印前可填入或修改每筆案件的紀錄人員
+ */
+function openRecorderAssignmentDialog() {
+  const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
+  const weekRoomRank = (item) => {
+    const r = displayRoom(item);
+    const idx = weekRoomOrder.indexOf(r);
+    return idx >= 0 ? idx : weekRoomOrder.length;
+  };
+
+  const rows = getFilteredCases()
+    .filter(item => !["withdrawn", "cancelled"].includes(item.status))
+    .slice()
+    .sort((a, b) => {
+      const d = a.meetingDate.localeCompare(b.meetingDate);
+      if (d !== 0) return d;
+      const t = a.meetingTime.localeCompare(b.meetingTime);
+      if (t !== 0) return t;
+      return weekRoomRank(a) - weekRoomRank(b);
+    });
+
+  const weekEnd  = addDays(selectedWeekStart, 4);
+  const minguo   = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日 ～ ${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
+
+  // 建立/重用 dialog
+  let dlg = document.getElementById("recorderAssignDlg");
+  if (!dlg) {
+    dlg = document.createElement("dialog");
+    dlg.id = "recorderAssignDlg";
+    dlg.style.cssText = "min-width:820px;max-width:95vw;max-height:90vh;border-radius:12px;padding:0;border:none;box-shadow:0 8px 40px rgba(0,0,0,.2);overflow:hidden;display:flex;flex-direction:column;";
+    document.body.appendChild(dlg);
+  }
+
+  // 依日期分組，建立可編輯表格 HTML
+  const byDate = {};
+  rows.forEach(item => {
+    if (!byDate[item.meetingDate]) byDate[item.meetingDate] = [];
+    byDate[item.meetingDate].push(item);
+  });
+
+  let tableBody = "";
+  const sortedDates = Object.keys(byDate).sort();
+  if (sortedDates.length === 0) {
+    tableBody = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;">本週無有效案件資料</td></tr>`;
+  } else {
+    sortedDates.forEach(dateKey => {
+      const dayItems = byDate[dateKey];
+      const dateObj  = parseDate(dateKey);
+      const dateLabel = `${formatDate(dateObj)}<br><span style="font-size:11px;font-weight:400;color:#6b7280;">${getWeekdayName(dateObj)}</span>`;
+      dayItems.forEach((item, idx) => {
+        const recorderVal = escapeHtml(item.recorder || "");
+        const itemKey = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
+        const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
+        const mediatorDisplay = escapeHtml(getMediatorDisplay(item));
+        const rowBg = idx % 2 === 0 ? "" : "background:#f9fafb;";
+        tableBody += `<tr style="${rowBg}">
+          ${idx === 0 ? `<td rowspan="${dayItems.length}" style="text-align:center;font-weight:700;background:#eef3fb;vertical-align:middle;white-space:nowrap;font-size:12px;">${dateLabel}</td>` : ""}
+          <td style="text-align:center;font-size:12px;">${escapeHtml(item.meetingTime)}</td>
+          <td style="font-size:12px;white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
+          <td style="font-size:12px;">${escapeHtml(item.caseNo || "（待補）")}</td>
+          <td style="font-size:12px;">${escapeHtml(item.worker || "")}</td>
+          <td style="font-size:12px;">${escapeHtml(item.employer || "")}</td>
+          <td style="font-size:12px;text-align:center;">${isSpecial ? '<span style="color:#dc2626;font-weight:700;" title="特殊案件">★</span> ' : ""}${mediatorDisplay}</td>
+          <td style="padding:3px 6px;">
+            <input type="text" value="${recorderVal}"
+              data-recorder-key="${escapeHtml(itemKey)}"
+              placeholder="填入姓名"
+              style="width:100%;border:1px solid #d1d5db;border-radius:5px;padding:4px 7px;font-size:13px;font-family:inherit;box-sizing:border-box;" />
+          </td>
+        </tr>`;
+      });
+    });
+  }
+
+  dlg.innerHTML = `
+    <div style="padding:18px 24px 12px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <h2 style="margin:0;font-size:17px;">列印記錄分配表</h2>
+        <button id="closeRecorderDlg" type="button" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 4px;">×</button>
+      </div>
+      <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(minguo)}　共 ${rows.length} 件</p>
+      <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">可在下方「紀錄人員」欄位直接輸入姓名，修改後再列印或匯出。</p>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:0 24px 8px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:14px;">
+        <thead>
+          <tr style="position:sticky;top:0;z-index:1;">
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap;">日期</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 6px;text-align:center;font-size:12px;white-space:nowrap;">時間</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">地點</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">案號</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">勞方</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">資方</th>
+            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;">調解人</th>
+            <th style="background:#fff3cd;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;min-width:120px;">紀錄人員 ✏️</th>
+          </tr>
+        </thead>
+        <tbody id="recorderTableBody" style="border:1px solid #e2e8f0;">
+          ${tableBody}
+        </tbody>
+      </table>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="recorderSaveBack" style="width:14px;height:14px;" />
+          儲存紀錄人員修改回案件資料
+        </label>
+      </div>
+      <button id="cancelRecorderDlg" type="button" class="secondary-button">取消</button>
+      <button id="printRecorderTable" type="button" class="secondary-button" style="min-width:120px;">🖨 列印分配表</button>
+      <button id="exportWeeklyWithRecorder" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報（含分配表）</button>
+    </div>
+  `;
+
+  // 加上 td border（dialog 內的 tbody td）
+  const tbodyCells = dlg.querySelectorAll("#recorderTableBody td");
+  tbodyCells.forEach(td => {
+    if (!td.style.border) td.style.border = "1px solid #e2e8f0";
+  });
+
+  document.getElementById("closeRecorderDlg").addEventListener("click",  () => dlg.close());
+  document.getElementById("cancelRecorderDlg").addEventListener("click", () => dlg.close());
+
+  document.getElementById("printRecorderTable").addEventListener("click", () => {
+    const overrides = collectRecorderOverrides();
+    const allRows = getFilteredCases().slice().sort((a,b) => a.meetingDate.localeCompare(b.meetingDate) || a.meetingTime.localeCompare(b.meetingTime));
+    const printHtml = buildRecorderAssignmentTableHtml(allRows, overrides, true);
+    const win = window.open("", "_blank", "width=1000,height=700");
+    if (!win) { alert("請允許彈出視窗以列印分配表"); return; }
+    win.document.write(printHtml);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  });
+
+  document.getElementById("exportWeeklyWithRecorder").addEventListener("click", async () => {
+    const overrides = collectRecorderOverrides();
+    // 若勾選「儲存回案件資料」，更新 cases 並同步 Supabase
+    if (document.getElementById("recorderSaveBack")?.checked) {
+      await saveRecorderOverridesBack(overrides);
+    }
+    dlg.close();
+    exportWeeklyReport(overrides);
+  });
+
+  dlg.showModal();
+}
+
+/** 從 dialog 內所有 input[data-recorder-key] 收集覆寫資料 */
+function collectRecorderOverrides() {
+  const overrides = {};
+  document.querySelectorAll("#recorderTableBody input[data-recorder-key]").forEach(input => {
+    overrides[input.dataset.recorderKey] = input.value.trim();
+  });
+  return overrides;
+}
+
+/** 將紀錄人員覆寫值存回 cases 陣列，並同步 Supabase */
+async function saveRecorderOverridesBack(overrides) {
+  const updates = [];
+  document.querySelectorAll("#recorderTableBody input[data-recorder-key]").forEach(input => {
+    const key  = input.dataset.recorderKey;      // date|time|room|id
+    const id   = key.split("|").pop();
+    const newRecorder = input.value.trim();
+    const idx  = cases.findIndex(c => c.id === id);
+    if (idx >= 0 && cases[idx].recorder !== newRecorder) {
+      cases[idx] = { ...cases[idx], recorder: newRecorder };
+      updates.push(cases[idx]);
+    }
+  });
+  persist();
+  // 批次寫回 Supabase
+  for (const item of updates) {
+    await saveRemoteCase(item);
+  }
+  if (updates.length) render();
 }

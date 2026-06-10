@@ -28,17 +28,6 @@
       .case-card.committee-type strong {
         color: #6d28d9;
       }
-      .case-card.assoc-type {
-        border-left: 4px solid #0d9488 !important;
-        background: #f0fdfa !important;
-      }
-      .case-card.assoc-type strong {
-        color: #0f766e;
-      }
-      .case-card.special.assoc-type {
-        border-left: 4px solid #0d9488 !important;
-        background: #f0fdfa !important;
-      }
       .case-card.special {
         border-left: 4px solid #dc2626 !important;
         background: #fff5f5 !important;
@@ -59,59 +48,16 @@
         <h1>會議排程管理</h1>
       </div>
       <div class="header-actions">
-
-        <!-- 列印作業 -->
-        <div class="btn-group">
-          <button class="group-toggle secondary-button" type="button"
-            onclick="toggleBtnGroup(this)">🖨 列印作業 ▾</button>
-          <div class="group-menu" hidden>
-            <button id="exportCsv" class="menu-item" type="button">匯出報表</button>
-            <button id="exportWeeklyReport" class="menu-item" type="button">產出週報表</button>
-            <button id="printRecorderSheet" class="menu-item" type="button">🖨 列印紀錄分配表</button>
-          </div>
-        </div>
-
-        <!-- 排程作業 -->
-        <div class="btn-group">
-          <button class="group-toggle secondary-button" type="button"
-            onclick="toggleBtnGroup(this)">📅 排程作業 ▾</button>
-          <div class="group-menu" hidden>
-            <button id="setRooms" class="menu-item" type="button">⚙ 設定可用會議室</button>
-          </div>
-        </div>
-
-        <!-- 匯入作業 -->
-        <div class="btn-group">
-          <button class="group-toggle secondary-button" type="button"
-            onclick="toggleBtnGroup(this)">📂 匯入作業 ▾</button>
-          <div class="group-menu" hidden>
-            <button id="backupData" class="menu-item" type="button">備份資料</button>
-            <input id="restoreInput" type="file" accept=".json" style="display:none" />
-            <button id="restoreData" class="menu-item" type="button">還原備份</button>
-            <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
-            <button id="importAssocBtn" class="menu-item" type="button">協會匯入案件 Excel</button>
-          </div>
-        </div>
-
+        <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
+        <button id="exportWeeklyReport" class="secondary-button" type="button">列印記錄分配表</button>
+        <button id="setRooms" class="secondary-button" type="button">⚙ 設定可用會議室</button>
+        <button id="backupData" class="secondary-button" type="button">備份資料</button>
+        <input id="restoreInput" type="file" accept=".json" style="display:none" />
+        <button id="restoreData" class="secondary-button" type="button">還原備份</button>
+        <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
+        <button id="importAssocBtn" class="secondary-button" type="button">協會匯入案件 Excel</button>
         <button id="newCase" class="primary-button" type="button">新增排程</button>
       </div>
-
-      <style>
-        .btn-group { position: relative; display: inline-block; }
-        .group-menu {
-          position: absolute; top: calc(100% + 4px); left: 0;
-          background: #fff; border: 1px solid #d1d5db;
-          border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
-          min-width: 180px; z-index: 999; padding: 4px 0;
-        }
-        .menu-item {
-          display: block; width: 100%; text-align: left;
-          padding: 9px 16px; border: none; background: none;
-          font-size: 13px; color: #374151; cursor: pointer;
-          white-space: nowrap;
-        }
-        .menu-item:hover { background: #f3f4f6; }
-      </style>
     </header>
 
     <main class="app-shell">
@@ -430,6 +376,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260529a"></script>
+    <script src="app.js?v=20260610a"></script>
   </body>
 </html>
