@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610d");
+console.log("app.js version: 20260610e");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -809,14 +809,24 @@ function renderCalendar(weekDates, filtered) {
   });
   const conflictKeys = new Set(Object.keys(slotRoomCount).filter(k => slotRoomCount[k] > 1));
 
-  timeSlots.forEach((slot) => {
+  // 動態收集本週所有實際出現的時段，排序後顯示
+  const weekDateKeys = new Set(weekDates.map(d => toDateInputValue(d)));
+  const dynamicSlots = [...new Set(
+    filtered
+      .filter(item => weekDateKeys.has(item.meetingDate))
+      .map(item => item.meetingTime)
+  )].sort();
+  // 若本週無任何案件，仍顯示預設四個時段
+  const slots = dynamicSlots.length > 0 ? dynamicSlots : timeSlots;
+
+  slots.forEach((slot) => {
     elements.calendar.append(createCell(slot, "time-cell"));
     weekDates.forEach((date) => {
       const cell = createCell("", "calendar-cell");
       const dateKey = toDateInputValue(date);
       filtered
         .filter((item) => item.meetingDate === dateKey && item.meetingTime === slot)
-        .sort((a, b) => roomRank(a) - roomRank(b) || a.caseNo.localeCompare(b.caseNo))
+        .sort((a, b) => roomRank(a) - roomRank(b) || (a.caseNo || "").localeCompare(b.caseNo || ""))
         .forEach((item) => {
           const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
           cell.append(createCaseCard(item, conflictKeys.has(key)));
@@ -858,11 +868,27 @@ function createCaseCard(item, isConflict = false) {
   const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
   const isReserved = item.status === "reserved";
   const isCommitteeType = item.reportCategory === "F";
-  button.className = `case-card ${item.status}${isSpecial ? " special" : ""}${isConflict ? " conflict" : ""}${isCommitteeType ? " committee-type" : ""}`;
+
+  // 協會類型 class
+  const assocClassMap = {
+    laborAssocCity:        "assoc-a",
+    laborAssocCounty:      "assoc-b",
+    laborEmploymentAssoc:  "assoc-e",
+    occupationalInjuryAssoc: "assoc-j",
+  };
+  const assocClass = assocClassMap[item.reportCategory] || "";
+
+  button.className = [
+    "case-card",
+    item.status,
+    isSpecial        ? "special"         : "",
+    isConflict       ? "conflict"        : "",
+    isCommitteeType  ? "committee-type"  : "",
+    assocClass,
+  ].filter(Boolean).join(" ");
+
   button.type = "button";
-  // 衝期標示：橘色，放在 specialTag 前
   const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
-  // 特殊案件：紅色字「特殊案件」固定顯示在最下方
   const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
@@ -870,11 +896,21 @@ function createCaseCard(item, isConflict = false) {
   const workerLine = isReserved
     ? `<small style="color:#6b7280;">待補：案號、勞資雙方</small>`
     : `<small>${escapeHtml(item.worker)} / ${escapeHtml(item.employer)}</small>`;
+  // 協會標籤
+  const assocLabelMap = {
+    laborAssocCity:          "A協會",
+    laborAssocCounty:        "B協會",
+    laborEmploymentAssoc:    "E協會",
+    occupationalInjuryAssoc: "J協會",
+  };
+  const assocLabel = assocLabelMap[item.reportCategory]
+    ? `<small style="font-weight:700;">${escapeHtml(assocLabelMap[item.reportCategory])}</small>`
+    : "";
   button.innerHTML = `
     ${mainLine}
     ${workerLine}
     <small>${escapeHtml(displayRoom(item))}｜${escapeHtml(getMediatorDisplay(item))}</small>
-    ${conflictTag}${specialTag}
+    ${assocLabel}${conflictTag}${specialTag}
   `;
   button.addEventListener("click", () => openCaseDialog(item.id));
   return button;
@@ -2392,4 +2428,30 @@ async function saveRecorderOverridesBack(container) {
     await saveRemoteCase(item);
   }
   if (updates.length) render();
+}
+
+// ── 摺疊按鈕群組 ──────────────────────────────────────────
+function toggleBtnGroup(toggleBtn) {
+  const menu = toggleBtn.nextElementSibling;
+  const isOpen = !menu.hidden;
+  // 先關閉所有其他群組
+  document.querySelectorAll(".btn-group-menu").forEach(m => {
+    m.hidden = true;
+    if (m.previousElementSibling) m.previousElementSibling.setAttribute("aria-expanded", "false");
+  });
+  // 切換目前群組
+  if (!isOpen) {
+    menu.hidden = false;
+    toggleBtn.setAttribute("aria-expanded", "true");
+    // 點擊頁面其他地方關閉
+    setTimeout(() => {
+      document.addEventListener("click", function closeMenu(e) {
+        if (!toggleBtn.closest(".btn-group").contains(e.target)) {
+          menu.hidden = true;
+          toggleBtn.setAttribute("aria-expanded", "false");
+          document.removeEventListener("click", closeMenu);
+        }
+      });
+    }, 0);
+  }
 }
