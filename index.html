@@ -6,6 +6,11 @@
     <title>調解會議排程系統</title>
     <link rel="stylesheet" href="styles.css" />
     <style>
+      /* 關掉瀏覽器預設的 required 紅框，只在表單送出時才顯示 */
+      input:invalid, select:invalid, textarea:invalid {
+        box-shadow: none;
+        outline: none;
+      }
       .case-card.conflict {
         border: 2px solid #d97706 !important;
         background: #fffbeb !important;
@@ -39,109 +44,12 @@
         border-left: 4px solid #7c3aed !important;
         background: #fdf4ff !important;
       }
-      /* ── 協會案件 卡片樣式（青綠色） ── */
       .case-card.assoc-type {
         border-left: 4px solid #0d9488 !important;
-        background: #ccfbf1 !important;
+        background: #f0fdfa !important;
       }
       .case-card.assoc-type strong {
-        color: #115e59;
-      }
-      .case-card.special.assoc-type {
-        /* 同時是特殊案件 + 協會案件 → 特殊紅優先 */
-        border-left: 4px solid #dc2626 !important;
-        background: #fff5f5 !important;
-      }
-      .case-card.special.assoc-type strong {
-        color: #dc2626;
-      }
-      /* ── 新增排程：核心欄位強化（案號／勞方／資方／承辦人） ── */
-      #caseDialog label:has(> #caseNo),
-      #caseDialog label:has(> #worker),
-      #caseDialog label:has(> #employer),
-      #caseDialog label:has(> #owner) {
-        color: #b91c1c;
-        font-weight: 700;
-      }
-      #caseDialog #caseNo,
-      #caseDialog #worker,
-      #caseDialog #employer,
-      #caseDialog #owner {
-        border: 1.5px solid #cbd5e1 !important;
-        border-left: 4px solid #dc2626 !important;
-        background: #fefce8 !important;
-        font-weight: 600;
-        font-size: 14px;
-        padding: 8px 10px;
-        border-radius: 6px;
-        transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-      }
-      #caseDialog #caseNo:focus,
-      #caseDialog #worker:focus,
-      #caseDialog #employer:focus,
-      #caseDialog #owner:focus {
-        border-color: #2563eb !important;
-        border-left-color: #dc2626 !important;
-        background: #fff !important;
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
-      }
-      #caseDialog #caseNo:not(:placeholder-shown),
-      #caseDialog #worker:not(:placeholder-shown),
-      #caseDialog #employer:not(:placeholder-shown),
-      #caseDialog #owner:not(:placeholder-shown) {
-        background: #fff !important;
-      }
-      /* ── 摺疊按鈕群組 ── */
-      .btn-group {
-        position: relative;
-        display: inline-block;
-      }
-      .btn-group-toggle {
-        min-height: 36px;
-        font-size: 13px;
-        padding: 0 14px;
-        white-space: nowrap;
-      }
-      .btn-group-menu {
-        display: none;
-        position: absolute;
-        top: calc(100% + 4px);
-        right: 0;
-        background: #fff;
-        border: 1px solid #d1d5db;
-        border-radius: 8px;
-        box-shadow: 0 6px 20px rgba(0,0,0,.13);
-        min-width: 180px;
-        z-index: 500;
-        flex-direction: column;
-        padding: 6px 0;
-      }
-      .btn-group-menu.open {
-        display: flex;
-      }
-      .btn-group-menu button {
-        display: block;
-        width: 100%;
-        text-align: left;
-        padding: 9px 16px;
-        background: none;
-        border: none;
-        font-size: 13px;
-        color: #374151;
-        cursor: pointer;
-        white-space: nowrap;
-        font-family: inherit;
-      }
-      .btn-group-menu button:hover {
-        background: #f3f4f6;
-      }
-      .btn-group-menu button.highlight {
-        color: #2563eb;
-        font-weight: 700;
-      }
-      .btn-group-menu button.highlight:hover {
-        background: #eff6ff;
+        color: #0f766e;
       }
     </style>
   </head>
@@ -152,46 +60,15 @@
         <h1>會議排程管理</h1>
       </div>
       <div class="header-actions">
-
-        <!-- 排程作業 群組 -->
-        <div class="btn-group">
-          <button class="btn-group-toggle secondary-button" type="button"
-                  onclick="toggleBtnGroup(this)" aria-expanded="false">
-            排程作業 ▾
-          </button>
-          <div class="btn-group-menu">
-            <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
-            <button id="importAssocBtn" type="button">協會匯入案件 Excel</button>
-            <button id="setRooms"       type="button">⚙ 設定可用會議室</button>
-            <button id="newCase"        type="button" class="highlight">＋ 新增排程</button>
-          </div>
-        </div>
-
-        <!-- 列印作業 群組 -->
-        <div class="btn-group">
-          <button class="btn-group-toggle secondary-button" type="button"
-                  onclick="toggleBtnGroup(this)" aria-expanded="false">
-            列印作業 ▾
-          </button>
-          <div class="btn-group-menu">
-            <button id="exportWeeklyReport" type="button">列印記錄分配表</button>
-            <button id="exportCsv"          type="button">匯出報表 CSV</button>
-          </div>
-        </div>
-
-        <!-- 資料作業 群組 -->
-        <div class="btn-group">
-          <button class="btn-group-toggle secondary-button" type="button"
-                  onclick="toggleBtnGroup(this)" aria-expanded="false">
-            資料作業 ▾
-          </button>
-          <div class="btn-group-menu">
-            <button id="backupData"  type="button">備份資料</button>
-            <input  id="restoreInput" type="file" accept=".json" style="display:none" />
-            <button id="restoreData" type="button">還原備份</button>
-          </div>
-        </div>
-
+        <button id="exportCsv" class="secondary-button" type="button">匯出報表</button>
+        <button id="exportWeeklyReport" class="secondary-button" type="button">產出週報表</button>
+        <button id="setRooms" class="secondary-button" type="button">⚙ 設定可用會議室</button>
+        <button id="backupData" class="secondary-button" type="button">備份資料</button>
+        <input id="restoreInput" type="file" accept=".json" style="display:none" />
+        <button id="restoreData" class="secondary-button" type="button">還原備份</button>
+        <input id="assocExcelInput" type="file" accept=".xlsx,.xls" style="display:none" />
+        <button id="importAssocBtn" class="secondary-button" type="button">協會匯入案件 Excel</button>
+        <button id="newCase" class="primary-button" type="button">新增排程</button>
       </div>
     </header>
 
@@ -511,6 +388,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260610k"></script>
+    <script src="app.js?v=20260611a"></script>
   </body>
 </html>

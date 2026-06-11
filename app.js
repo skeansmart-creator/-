@@ -1,4 +1,4 @@
-console.log("app.js version: 20260610k");
+console.log("app.js version: 20260611a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -184,7 +184,7 @@ document.querySelector("#restoreInput").addEventListener("change", restoreData);
 document.querySelector("#closeDialog").addEventListener("click", closeDialog);
 document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
-document.querySelector("#exportWeeklyReport").addEventListener("click", openRecorderAssignmentDialog);
+document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
@@ -809,24 +809,14 @@ function renderCalendar(weekDates, filtered) {
   });
   const conflictKeys = new Set(Object.keys(slotRoomCount).filter(k => slotRoomCount[k] > 1));
 
-  // 動態收集本週所有實際出現的時段，排序後顯示
-  const weekDateKeys = new Set(weekDates.map(d => toDateInputValue(d)));
-  const dynamicSlots = [...new Set(
-    filtered
-      .filter(item => weekDateKeys.has(item.meetingDate))
-      .map(item => item.meetingTime)
-  )].sort();
-  // 若本週無任何案件，仍顯示預設四個時段
-  const slots = dynamicSlots.length > 0 ? dynamicSlots : timeSlots;
-
-  slots.forEach((slot) => {
+  timeSlots.forEach((slot) => {
     elements.calendar.append(createCell(slot, "time-cell"));
     weekDates.forEach((date) => {
       const cell = createCell("", "calendar-cell");
       const dateKey = toDateInputValue(date);
       filtered
         .filter((item) => item.meetingDate === dateKey && item.meetingTime === slot)
-        .sort((a, b) => roomRank(a) - roomRank(b) || (a.caseNo || "").localeCompare(b.caseNo || ""))
+        .sort((a, b) => roomRank(a) - roomRank(b) || a.caseNo.localeCompare(b.caseNo))
         .forEach((item) => {
           const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}`;
           cell.append(createCaseCard(item, conflictKeys.has(key)));
@@ -879,18 +869,18 @@ function createCaseCard(item, isConflict = false) {
   button.className = [
     "case-card",
     item.status,
-    isSpecial        ? "special"         : "",
-    isConflict       ? "conflict"        : "",
-    isCommitteeType  ? "committee-type"  : "",
-    isAssocType      ? "assoc-type"      : "",
+    isSpecial       ? "special"        : "",
+    isConflict      ? "conflict"       : "",
+    isCommitteeType ? "committee-type"  : "",
+    isAssocType     ? "assoc-type"      : "",
   ].filter(Boolean).join(" ");
 
   button.type = "button";
-  const conflictTag = isConflict  ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
+  const conflictTag = isConflict ? `<small style="color:#d97706;font-weight:700;">⚠ 衝期</small>` : "";
   const assocTag    = isAssocType ? `<small style="color:#0f766e;font-weight:800;font-size:13px;letter-spacing:0.5px;">協會案件</small>` : "";
-  const specialTag  = isSpecial   ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
+  const specialTag  = isSpecial  ? `<small style="color:#dc2626;font-weight:700;">特殊案件</small>` : "";
   const recorderTag = item.recorder
-    ? `<small style="color:#1d4ed8;font-weight:600;">📝 ${escapeHtml(item.recorder)}</small>`
+    ? `<small style="color:#1d4ed8;font-weight:600;">${escapeHtml(item.recorder)}</small>`
     : "";
   const mainLine = isReserved
     ? `<strong>【預約】${escapeHtml(getMediatorDisplay(item))}</strong>`
@@ -1351,7 +1341,7 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-function exportWeeklyReport(recorderOverrides) {
+function exportWeeklyReport() {
   // 地點排序
   const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
   const weekRoomRank = (item) => {
@@ -1374,27 +1364,17 @@ function exportWeeklyReport(recorderOverrides) {
   const reportTitle = `${toMinguoDate(selectedWeekStart)}-${toMinguoDate(weekEnd)}`;
   const dispatcher = "";
   const counts = buildWeeklyCounts(rows);
-
-  // 若有傳入 recorderOverrides，使用覆寫的紀錄人員
-  const getRecorder = (item) => {
-    if (recorderOverrides) {
-      const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
-      return recorderOverrides[key] !== undefined ? recorderOverrides[key] : item.recorder;
-    }
-    return item.recorder;
-  };
-
   const detailRows = rows.map((item) => [
     formatDate(parseDate(item.meetingDate)),
     getWeekdayName(parseDate(item.meetingDate)),
     displayRoom(item),
-    item.meetingTime,
+    item.meetingTime,  // 直接使用 HH:MM 格式
     ["withdrawn", "cancelled"].includes(item.status) ? statusLabels[item.status] : item.worker,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.employer,
     ["withdrawn", "cancelled"].includes(item.status) ? "" : item.disputeType,
     item.owner,
     getMediatorDisplay(item),
-    getRecorder(item),
+    item.recorder,
     item.notes,
   ]);
 
@@ -1406,9 +1386,6 @@ function exportWeeklyReport(recorderOverrides) {
     ["期間(週)", "調解人", "調解委員會", "仲裁人(委員會)", "轉外縣市/中科/加工區", "台中市勞資關係協會", "台中縣勞資關係協會", "台中市勞雇關係協會", "職災法律權益服務協會", "本局召開案件數", "男", "女", "中高齡"],
     [`${formatMonthDay(selectedWeekStart)}~${formatMonthDay(weekEnd)}(預計召開)`, counts.mediator, counts.committee, counts.arbitration, counts.transfer, counts.laborAssocCity, counts.laborAssocCounty, counts.laborEmploymentAssoc, counts.occupationalInjuryAssoc, counts.bureau, counts.male, counts.female, counts.middleAged],
   ]);
-
-  // 紀錄分配表 HTML（用於週報匯出）
-  const recorderTableHtml = buildRecorderAssignmentTableHtml(rows, recorderOverrides, false);
 
   const html = `
     <html>
@@ -1422,8 +1399,6 @@ function exportWeeklyReport(recorderOverrides) {
           th, td { border: 1px solid #333; padding: 6px; font-size: 12px; vertical-align: middle; }
           th { background: #e8eef5; font-weight: 700; text-align: center; }
           .count-title { font-weight: 700; margin-top: 20px; }
-          .section-title { font-weight: 700; margin-top: 28px; margin-bottom: 8px; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; }
-          .page-break { page-break-before: always; }
         </style>
       </head>
       <body>
@@ -1436,8 +1411,6 @@ function exportWeeklyReport(recorderOverrides) {
         ${detailTable}
         <div class="count-title">件數統計</div>
         ${countTable}
-        <div class="section-title page-break">勞資爭議調解紀錄分配表</div>
-        ${recorderTableHtml}
       </body>
     </html>
   `;
@@ -2091,439 +2064,5 @@ function fixSheetRef(ws) {
   }
   if (maxRow > parseInt(refMatch[4])) {
     ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// 紀錄分配表 Dialog
-// ══════════════════════════════════════════════════════════
-
-/**
- * 建立紀錄分配表 HTML（靜態，用於列印 / 週報匯出）
- * @param {Array}  rows             - 已排序的案件陣列
- * @param {Object} recorderOverrides - { key: recorderName } 覆寫紀錄人員
- * @param {boolean} forPrint        - true → 輸出帶有列印樣式的完整 HTML 頁面；false → 只回傳 table HTML
- */
-function buildRecorderAssignmentTableHtml(rows, recorderOverrides, forPrint) {
-  const weekEnd = addDays(selectedWeekStart, 4);
-  const minguo  = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日～${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
-
-  // 只顯示有效案件（排除撤回/取消）
-  const validRows = rows.filter(item => !["withdrawn", "cancelled"].includes(item.status));
-
-  // 依日期分組
-  const byDate = {};
-  validRows.forEach(item => {
-    if (!byDate[item.meetingDate]) byDate[item.meetingDate] = [];
-    byDate[item.meetingDate].push(item);
-  });
-
-  const getRecorder = (item) => {
-    if (recorderOverrides) {
-      const key = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
-      return recorderOverrides[key] !== undefined ? recorderOverrides[key] : (item.recorder || "");
-    }
-    return item.recorder || "";
-  };
-
-  // 計算每一天的 rowspan
-  let tableRows = "";
-  const sortedDates = Object.keys(byDate).sort();
-
-  sortedDates.forEach(dateKey => {
-    const dayItems = byDate[dateKey];
-    const dateObj  = parseDate(dateKey);
-    const dateLabel = `${formatDate(dateObj)}（${getWeekdayName(dateObj)}）`;
-
-    dayItems.forEach((item, idx) => {
-      const recorder = getRecorder(item);
-      const isFirst  = idx === 0;
-      const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
-      const specialMark = isSpecial ? `<span style="color:#dc2626;font-weight:700;">★</span> ` : "";
-      tableRows += `<tr>
-        ${isFirst ? `<td rowspan="${dayItems.length}" style="text-align:center;font-weight:700;background:#f0f4fa;white-space:nowrap;">${escapeHtml(dateLabel)}</td>` : ""}
-        <td style="text-align:center;">${escapeHtml(item.meetingTime)}</td>
-        <td style="text-align:center;">${escapeHtml(displayRoom(item))}</td>
-        <td>${escapeHtml(item.caseNo || "")}</td>
-        <td>${escapeHtml(item.worker || "")}</td>
-        <td>${escapeHtml(item.employer || "")}</td>
-        <td style="text-align:center;">${specialMark}${escapeHtml(getMediatorDisplay(item))}</td>
-        <td style="text-align:center;font-weight:600;color:#1d4ed8;">${escapeHtml(recorder)}</td>
-      </tr>`;
-    });
-  });
-
-  if (!tableRows) {
-    tableRows = `<tr><td colspan="8" style="border:1px solid #333;padding:6px 8px;vertical-align:middle;text-align:center;color:#9ca3af;padding:20px;">本週無有效案件</td></tr>`;
-  }
-
-  // td 統一在 tableRows 生成時就帶完整 border style，此處直接輸出不做二次替換
-  const tdBase = 'border:1px solid #333;padding:6px 8px;vertical-align:middle;';
-  const styledRows = tableRows
-    // 補上沒有 style 的 <td>（純 <td>）
-    .replace(/<td>/g, `<td style="${tdBase}">`)
-    // 補上有其他 style 但沒有 border 的 <td style="...">
-    .replace(/<td style="(?!border)/g, `<td style="${tdBase}`);
-
-  const styledTable = `
-    <table style="border-collapse:collapse;width:100%;font-size:12px;">
-      <thead>
-        <tr style="background:#dde6f0;">
-          <th style="border:1px solid #333;padding:7px 10px;text-align:center;">日期</th>
-          <th style="border:1px solid #333;padding:7px 6px;text-align:center;white-space:nowrap;">時間</th>
-          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">地點</th>
-          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">案號</th>
-          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">勞方</th>
-          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">資方</th>
-          <th style="border:1px solid #333;padding:7px 8px;text-align:center;">調解人</th>
-          <th style="border:1px solid #333;padding:7px 10px;text-align:center;">紀錄人員</th>
-        </tr>
-      </thead>
-      <tbody>${styledRows}</tbody>
-    </table>
-  `;
-
-  if (!forPrint) return styledTable;
-
-  return `<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8" />
-  <title>勞資爭議調解紀錄分配表</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { font-family: "Microsoft JhengHei", "標楷體", Arial, sans-serif; margin: 20px 28px; color: #111; }
-    h1 { text-align: center; font-size: 18px; margin-bottom: 4px; }
-    .subtitle { text-align: center; font-size: 13px; color: #555; margin-bottom: 16px; }
-    table { border-collapse: collapse; width: 100%; font-size: 12px; }
-    th { background: #dde6f0; border: 1px solid #333; padding: 7px 8px; text-align: center; font-weight: 700; }
-    td { border: 1px solid #333; padding: 6px 8px; vertical-align: middle; }
-    .note { font-size: 11px; color: #666; margin-top: 14px; }
-    .toolbar {
-      display: flex; gap: 10px; justify-content: flex-end;
-      margin-bottom: 14px; padding-bottom: 10px;
-      border-bottom: 1px solid #d1d5db;
-    }
-    .btn {
-      padding: 6px 18px; border-radius: 6px; font-size: 13px;
-      cursor: pointer; font-family: inherit; border: 1px solid #d1d5db;
-    }
-    .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 600; }
-    .btn-secondary { background: #f3f4f6; color: #374151; }
-    @media print {
-      body { margin: 10mm 14mm; }
-      @page { size: A4 landscape; margin: 12mm; }
-      .toolbar, .no-print { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-  <div class="toolbar no-print">
-    <button class="btn btn-secondary" onclick="window.close()">✕ 關閉</button>
-    <button class="btn btn-primary" onclick="window.print()">🖨 列印</button>
-  </div>
-  <h1>勞資爭議調解紀錄分配表</h1>
-  <div class="subtitle">${escapeHtml(minguo)}</div>
-  ${styledTable}
-  <div class="note">★ 特殊案件　　製表日期：${formatDate(new Date())}</div>
-</body>
-</html>`;
-}
-
-/**
- * 開啟「列印記錄分配表」互動 Dialog
- * 使用 overlay div 而非 <dialog>，避免瀏覽器 dialog 堆疊限制
- */
-function openRecorderAssignmentDialog() {
-  const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
-  const weekRoomRank = (item) => {
-    const r = displayRoom(item);
-    const idx = weekRoomOrder.indexOf(r);
-    return idx >= 0 ? idx : weekRoomOrder.length;
-  };
-
-  const rows = getFilteredCases()
-    .filter(item => !["withdrawn", "cancelled"].includes(item.status))
-    .slice()
-    .sort((a, b) => {
-      const d = a.meetingDate.localeCompare(b.meetingDate);
-      if (d !== 0) return d;
-      const t = a.meetingTime.localeCompare(b.meetingTime);
-      if (t !== 0) return t;
-      return weekRoomRank(a) - weekRoomRank(b);
-    });
-
-  const weekEnd = addDays(selectedWeekStart, 4);
-  const minguo  = `民國 ${selectedWeekStart.getFullYear() - 1911} 年 ${selectedWeekStart.getMonth() + 1} 月 ${selectedWeekStart.getDate()} 日 ～ ${weekEnd.getMonth() + 1} 月 ${weekEnd.getDate()} 日`;
-
-  // 移除舊的 overlay
-  const oldOverlay = document.getElementById("recorderAssignOverlay");
-  if (oldOverlay) oldOverlay.remove();
-
-  // 建立 overlay 背景層
-  const overlay = document.createElement("div");
-  overlay.id = "recorderAssignOverlay";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";
-
-  // 建立 panel
-  const panel = document.createElement("div");
-  panel.style.cssText = "background:#fff;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.22);min-width:820px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;";
-
-  // 關閉函式
-  const closeOverlay = () => overlay.remove();
-
-  // 點擊背景關閉
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeOverlay(); });
-
-  // 依日期分組
-  const byDate = {};
-  rows.forEach(item => {
-    if (!byDate[item.meetingDate]) byDate[item.meetingDate] = [];
-    byDate[item.meetingDate].push(item);
-  });
-
-  let tableBody = "";
-  const sortedDates = Object.keys(byDate).sort();
-  if (sortedDates.length === 0) {
-    tableBody = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;border:1px solid #e2e8f0;">本週無有效案件資料</td></tr>`;
-  } else {
-    sortedDates.forEach(dateKey => {
-      const dayItems = byDate[dateKey];
-      const dateObj  = parseDate(dateKey);
-      const dateLabel = `${formatDate(dateObj)}<br><span style="font-size:11px;font-weight:400;color:#6b7280;">${getWeekdayName(dateObj)}</span>`;
-      dayItems.forEach((item, idx) => {
-        const recorderVal = escapeHtml(item.recorder || "");
-        const itemKey = `${item.meetingDate}|${item.meetingTime}|${displayRoom(item)}|${item.id}`;
-        const isSpecial = item.specialCaseType && item.specialCaseType !== "無" && item.specialCaseType !== "";
-        const mediatorDisplay = escapeHtml(getMediatorDisplay(item));
-        const rowBg = idx % 2 === 0 ? "" : "background:#f9fafb;";
-        const tdStyle = "border:1px solid #e2e8f0;padding:6px 8px;vertical-align:middle;";
-        tableBody += `<tr style="${rowBg}">
-          ${idx === 0 ? `<td rowspan="${dayItems.length}" style="${tdStyle}text-align:center;font-weight:700;background:#eef3fb;white-space:nowrap;font-size:12px;">${dateLabel}</td>` : ""}
-          <td style="${tdStyle}text-align:center;font-size:12px;">${escapeHtml(item.meetingTime)}</td>
-          <td style="${tdStyle}font-size:12px;white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
-          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.caseNo || "（待補）")}</td>
-          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.worker || "")}</td>
-          <td style="${tdStyle}font-size:12px;">${escapeHtml(item.employer || "")}</td>
-          <td style="${tdStyle}font-size:12px;text-align:center;">${isSpecial ? '<span style="color:#dc2626;font-weight:700;" title="特殊案件">★</span> ' : ""}${mediatorDisplay}</td>
-          <td style="border:1px solid #e2e8f0;padding:3px 6px;vertical-align:middle;">
-            <input type="text" value="${recorderVal}"
-              data-recorder-key="${escapeHtml(itemKey)}"
-              placeholder="填入姓名"
-              style="width:100%;border:1px solid #d1d5db;border-radius:5px;padding:4px 7px;font-size:13px;font-family:inherit;box-sizing:border-box;" />
-          </td>
-        </tr>`;
-      });
-    });
-  }
-
-  panel.innerHTML = `
-    <div style="padding:18px 24px 12px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <h2 style="margin:0;font-size:17px;">列印記錄分配表</h2>
-        <button id="recorderCloseBtnX" type="button" style="background:none;border:none;font-size:24px;cursor:pointer;color:#666;line-height:1;padding:0 6px;">×</button>
-      </div>
-      <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(minguo)}　共 ${rows.length} 件</p>
-      <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">可在下方「紀錄人員」欄位直接輸入姓名，修改後再列印或匯出。</p>
-    </div>
-    <div style="overflow-y:auto;flex:1;padding:0 24px 8px;">
-      <table style="width:100%;border-collapse:collapse;margin-top:14px;">
-        <thead>
-          <tr>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap;position:sticky;top:0;">日期</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px 6px;text-align:center;font-size:12px;white-space:nowrap;position:sticky;top:0;">時間</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">地點</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">案號</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">勞方</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">資方</th>
-            <th style="background:#dde6f0;border:1px solid #c5d0e6;padding:8px;text-align:center;font-size:12px;position:sticky;top:0;">調解人</th>
-            <th style="background:#fff3cd;border:1px solid #c5d0e6;padding:8px 10px;text-align:center;font-size:12px;min-width:120px;position:sticky;top:0;">紀錄人員 ✏️</th>
-          </tr>
-        </thead>
-        <tbody id="recorderTableBody">
-          ${tableBody}
-        </tbody>
-      </table>
-    </div>
-    <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
-      <span id="recorderSaveHint" style="flex:1;min-width:160px;font-size:12px;color:#9ca3af;">填入後請按右側「💾 儲存」</span>
-      <button id="recorderCancelBtn" type="button" class="secondary-button">取消</button>
-      <button id="recorderSaveBtn" type="button" class="primary-button" style="min-width:110px;background:#059669;border-color:#059669;">💾 儲存</button>
-      <button id="recorderPrintBtn" type="button" class="secondary-button" style="min-width:120px;">🖨 列印分配表</button>
-      <button id="recorderExportBtn" type="button" class="primary-button" style="min-width:160px;">📄 產出完整週報</button>
-    </div>
-  `;
-
-  // 所有按鈕直接用 JS 綁定在 panel 元素上
-  panel.querySelector("#recorderCloseBtnX").addEventListener("click", closeOverlay);
-  panel.querySelector("#recorderCancelBtn").addEventListener("click", closeOverlay);
-
-  // 💾 儲存按鈕：儲存後不關閉視窗，顯示成功訊息
-  panel.querySelector("#recorderSaveBtn").addEventListener("click", async (e) => {
-    const btn  = e.currentTarget;
-    const hint = panel.querySelector("#recorderSaveHint");
-    btn.disabled = true;
-    btn.textContent = "儲存中…";
-    try {
-      const updatedCount = await saveRecorderOverridesBack(panel);
-      // 明顯的 toast 提示
-      showToast(updatedCount > 0
-        ? `✓ 已儲存 ${updatedCount} 筆紀錄人員修改`
-        : "沒有變更可儲存", updatedCount > 0 ? "success" : "info");
-      hint.textContent = updatedCount > 0
-        ? `✓ 上次儲存：${updatedCount} 筆（${new Date().toLocaleTimeString("zh-TW", {hour12:false})}）`
-        : "沒有變更可儲存";
-      hint.style.color = updatedCount > 0 ? "#059669" : "#9ca3af";
-      btn.textContent = "✓ 已儲存";
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = "💾 儲存";
-      }, 1500);
-    } catch (err) {
-      showToast(`儲存失敗：${err.message}`, "error");
-      hint.textContent = `儲存失敗：${err.message}`;
-      hint.style.color = "#dc2626";
-      btn.disabled = false;
-      btn.textContent = "💾 儲存";
-    }
-  });
-
-  // 🖨 列印：自動儲存後再列印
-  panel.querySelector("#recorderPrintBtn").addEventListener("click", async () => {
-    await saveRecorderOverridesBack(panel);
-    const overrides = collectRecorderOverrides(panel);
-    const allRows = getFilteredCases()
-      .filter(item => !["withdrawn","cancelled"].includes(item.status))
-      .slice()
-      .sort((a,b) => a.meetingDate.localeCompare(b.meetingDate) || a.meetingTime.localeCompare(b.meetingTime));
-    const printHtml = buildRecorderAssignmentTableHtml(allRows, overrides, true);
-    const win = window.open("", "_blank", "width=1100,height=750");
-    if (!win) { alert("請允許彈出視窗以列印分配表"); return; }
-    win.document.write(printHtml);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 400);
-  });
-
-  // 📄 產出週報：自動儲存後再匯出
-  panel.querySelector("#recorderExportBtn").addEventListener("click", async () => {
-    await saveRecorderOverridesBack(panel);
-    const overrides = collectRecorderOverrides(panel);
-    closeOverlay();
-    exportWeeklyReport(overrides);
-  });
-
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-}
-
-/** 從 container 內所有 input[data-recorder-key] 收集覆寫資料 */
-function collectRecorderOverrides(container) {
-  const root = container || document;
-  const overrides = {};
-  root.querySelectorAll("input[data-recorder-key]").forEach(input => {
-    overrides[input.dataset.recorderKey] = input.value.trim();
-  });
-  return overrides;
-}
-
-/** 將紀錄人員覆寫值存回 cases 陣列，並同步 Supabase。回傳更新筆數 */
-async function saveRecorderOverridesBack(container) {
-  const root = container || document;
-  const updates = [];
-  root.querySelectorAll("input[data-recorder-key]").forEach(input => {
-    const key  = input.dataset.recorderKey;      // date|time|room|id
-    const id   = key.split("|").pop();
-    const newRecorder = input.value.trim();
-    const idx  = cases.findIndex(c => c.id === id);
-    if (idx >= 0 && cases[idx].recorder !== newRecorder) {
-      cases[idx] = { ...cases[idx], recorder: newRecorder };
-      updates.push(cases[idx]);
-    }
-  });
-  persist();
-  // 批次寫回 Supabase
-  for (const item of updates) {
-    await saveRemoteCase(item);
-  }
-  if (updates.length) render();
-  return updates.length;
-}
-
-// ── Toast 全螢幕通知 ──────────────────────────────────────
-function showToast(message, type = "success") {
-  // 移除舊 toast
-  const old = document.getElementById("appToast");
-  if (old) old.remove();
-
-  const colorMap = {
-    success: { bg: "#059669", icon: "✓" },
-    error:   { bg: "#dc2626", icon: "✕" },
-    info:    { bg: "#3b82f6", icon: "ℹ" },
-  };
-  const { bg } = colorMap[type] || colorMap.info;
-
-  const toast = document.createElement("div");
-  toast.id = "appToast";
-  toast.textContent = message;
-  toast.style.cssText = `
-    position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: ${bg};
-    color: #fff;
-    padding: 14px 28px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.25s, transform 0.25s;
-  `;
-  document.body.appendChild(toast);
-
-  // 觸發入場動畫
-  requestAnimationFrame(() => {
-    toast.style.opacity = "1";
-    toast.style.transform = "translateX(-50%) translateY(4px)";
-  });
-
-  // 3 秒後淡出
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    setTimeout(() => toast.remove(), 300);
-  }, 2700);
-}
-
-// ── 摺疊按鈕群組 ──────────────────────────────────────────
-function toggleBtnGroup(toggleBtn) {
-  const menu = toggleBtn.nextElementSibling;
-  const isOpen = menu.classList.contains("open");
-
-  // 先關閉所有群組
-  document.querySelectorAll(".btn-group-menu").forEach(m => {
-    m.classList.remove("open");
-  });
-  document.querySelectorAll(".btn-group-toggle").forEach(b => {
-    b.setAttribute("aria-expanded", "false");
-  });
-
-  // 若原本是關閉狀態，則開啟
-  if (!isOpen) {
-    menu.classList.add("open");
-    toggleBtn.setAttribute("aria-expanded", "true");
-
-    // 點擊選單外任何地方關閉
-    setTimeout(() => {
-      document.addEventListener("click", function closeMenu(e) {
-        if (!toggleBtn.closest(".btn-group").contains(e.target)) {
-          menu.classList.remove("open");
-          toggleBtn.setAttribute("aria-expanded", "false");
-          document.removeEventListener("click", closeMenu);
-        }
-      });
-    }, 0);
   }
 }
