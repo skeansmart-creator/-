@@ -1,4 +1,4 @@
-console.log("app.js version: 20260611a");
+console.log("app.js version: 20260710a");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -186,6 +186,27 @@ document.querySelector("#cancelEdit").addEventListener("click", closeDialog);
 document.querySelector("#exportCsv").addEventListener("click", exportCsv);
 document.querySelector("#exportWeeklyReport").addEventListener("click", exportWeeklyReport);
 document.querySelector("#setRooms").addEventListener("click", openRoomReservationDialog);
+document.querySelector("#fillRecorderBtn").addEventListener("click", openRecorderFillOverlay);
+
+// ── 上方功能下拉選單開合 ──
+document.querySelectorAll(".btn-dropdown-toggle").forEach((toggle) => {
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const dd = toggle.closest(".btn-dropdown");
+    const wasOpen = dd.classList.contains("open");
+    document.querySelectorAll(".btn-dropdown.open").forEach((d) => d.classList.remove("open"));
+    if (!wasOpen) dd.classList.add("open");
+  });
+});
+// 點選單內任一功能後自動收合；點空白處也收合
+document.querySelectorAll(".btn-dropdown-menu button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".btn-dropdown.open").forEach((d) => d.classList.remove("open"));
+  });
+});
+document.addEventListener("click", () => {
+  document.querySelectorAll(".btn-dropdown.open").forEach((d) => d.classList.remove("open"));
+});
 elements.weekPicker.addEventListener("change", handleWeekChange);
 document.querySelector("#prevWeek").addEventListener("click", () => {
   selectedWeekStart = addDays(selectedWeekStart, -7);
@@ -2065,4 +2086,232 @@ function fixSheetRef(ws) {
   if (maxRow > parseInt(refMatch[4])) {
     ws['!ref'] = refMatch[1] + refMatch[2] + ':' + refMatch[3] + maxRow;
   }
+}
+
+// ══════════════════════════════════════════════════════════
+// 填入記錄人員（批次排程作業）
+// ══════════════════════════════════════════════════════════
+
+let recorderFillWeekStart = null;
+
+function showToast(message) {
+  let toast = document.getElementById("appToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "appToast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+function isAssocCategory(item) {
+  const cat = String(item?.reportCategory || "").toUpperCase();
+  const longAssocSet = new Set(["laborAssocCity", "laborAssocCounty", "laborEmploymentAssoc", "occupationalInjuryAssoc"]);
+  return ["A", "AH", "B", "BH", "E", "EH", "J", "JH"].includes(cat) || longAssocSet.has(item?.reportCategory);
+}
+
+function openRecorderFillOverlay() {
+  // 每次開啟都移除重建，避免殘留失效的事件監聽
+  const existing = document.getElementById("recorderFillOverlay");
+  if (existing) existing.remove();
+
+  recorderFillWeekStart = new Date(selectedWeekStart);
+
+  const overlay = document.createElement("div");
+  overlay.id = "recorderFillOverlay";
+  overlay.innerHTML = `
+    <div class="recorder-fill-panel">
+      <div class="recorder-fill-head">
+        <h2 style="margin:0;font-size:17px;">填入記錄人員</h2>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <button id="rfPrevWeek" type="button" class="icon-button" style="font-size:18px;">«</button>
+          <span id="rfWeekRange" style="font-size:13px;font-weight:600;min-width:150px;text-align:center;"></span>
+          <button id="rfNextWeek" type="button" class="icon-button" style="font-size:18px;">»</button>
+        </div>
+        <span id="rfCounter" style="font-size:13px;color:var(--muted);"></span>
+        <button id="rfClose" type="button" class="icon-button" aria-label="關閉" style="font-size:22px;">×</button>
+      </div>
+      <div class="recorder-fill-body">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th><th>時間</th><th>地點</th><th>勞方</th><th>資方</th>
+              <th>調解人</th><th>承辦人</th><th>紀錄</th>
+            </tr>
+          </thead>
+          <tbody id="rfTableBody"></tbody>
+        </table>
+        <datalist id="recorderNameList"></datalist>
+      </div>
+      <div class="recorder-fill-foot">
+        <span id="rfHint" style="font-size:12px;color:var(--muted);">協會案件已自動預填「協會指派」，仍可修改；灰底為撤回/取消案件。</span>
+        <span style="margin-left:auto;"></span>
+        <button id="rfCancel" type="button" class="secondary-button">關閉</button>
+        <button id="rfSave" type="button" class="primary-button" style="min-width:110px;">儲存</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("rfClose").addEventListener("click", closeRecorderFillOverlay);
+  document.getElementById("rfCancel").addEventListener("click", closeRecorderFillOverlay);
+  document.getElementById("rfSave").addEventListener("click", saveRecorderFill);
+  document.getElementById("rfPrevWeek").addEventListener("click", () => shiftRecorderFillWeek(-7));
+  document.getElementById("rfNextWeek").addEventListener("click", () => shiftRecorderFillWeek(7));
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeRecorderFillOverlay();
+  });
+
+  renderRecorderFillTable();
+  overlay.classList.add("open");
+}
+
+function closeRecorderFillOverlay() {
+  if (recorderFillHasChanges() && !confirm("有尚未儲存的變更，確定關閉？")) return;
+  const overlay = document.getElementById("recorderFillOverlay");
+  if (overlay) overlay.remove();
+}
+
+function shiftRecorderFillWeek(days) {
+  if (recorderFillHasChanges() && !confirm("有尚未儲存的變更，切換週次將放棄變更。確定切換？")) return;
+  recorderFillWeekStart = addDays(recorderFillWeekStart, days);
+  renderRecorderFillTable();
+}
+
+function recorderFillHasChanges() {
+  return Array.from(document.querySelectorAll("#rfTableBody input.recorder-input"))
+    .some((input) => input.value.trim() !== (input.dataset.original ?? ""));
+}
+
+function getRecorderFillRows() {
+  const weekEnd = addDays(recorderFillWeekStart, 4);
+  const weekRoomOrder = ["晤談室(一)", "晤談室(四)", "晤談室(三)", "勞資爭議調解會議室", "晤談室(二)"];
+  const rank = (item) => {
+    const idx = weekRoomOrder.indexOf(displayRoom(item));
+    return idx >= 0 ? idx : weekRoomOrder.length;
+  };
+  return cases
+    .filter((item) => {
+      const date = parseDate(item.meetingDate);
+      return date >= recorderFillWeekStart && date <= weekEnd;
+    })
+    .sort((a, b) =>
+      a.meetingDate.localeCompare(b.meetingDate) ||
+      a.meetingTime.localeCompare(b.meetingTime) ||
+      rank(a) - rank(b)
+    );
+}
+
+function renderRecorderFillTable() {
+  const tbody = document.getElementById("rfTableBody");
+  const weekEnd = addDays(recorderFillWeekStart, 4);
+  document.getElementById("rfWeekRange").textContent =
+    `${formatDate(recorderFillWeekStart)} 至 ${formatDate(weekEnd)}`;
+
+  // 彙整既有記錄人員名單作為 datalist
+  const nameList = document.getElementById("recorderNameList");
+  const names = [...new Set(cases.map((c) => (c.recorder || "").trim()).filter(Boolean))].sort();
+  nameList.innerHTML = names.map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
+
+  const rows = getRecorderFillRows();
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">本週沒有案件</td></tr>`;
+    updateRecorderFillCounter();
+    return;
+  }
+
+  tbody.innerHTML = rows.map((item) => {
+    const inactive = ["withdrawn", "cancelled"].includes(item.status);
+    const original = (item.recorder || "").trim();
+    // 協會案件且尚未填寫 → 預填「協會指派」（列入待儲存變更）
+    const prefill = !inactive && !original && isAssocCategory(item) ? "協會指派" : original;
+    const d = parseDate(item.meetingDate);
+    const rowClass = inactive ? "inactive" : (prefill ? "filled" : "");
+    return `
+      <tr class="${rowClass}" data-id="${item.id}">
+        <td style="white-space:nowrap;">${formatMonthDay(d)}(${getWeekdayName(d).replace("週", "")})</td>
+        <td>${escapeHtml(item.meetingTime)}</td>
+        <td style="white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
+        <td>${escapeHtml(inactive ? statusLabels[item.status] : item.worker)}</td>
+        <td>${escapeHtml(inactive ? "" : item.employer)}</td>
+        <td>${escapeHtml(inactive ? "" : getMediatorDisplay(item))}</td>
+        <td>${escapeHtml(inactive ? "" : item.owner)}</td>
+        <td><input class="recorder-input" list="recorderNameList"
+          value="${escapeHtml(prefill)}" data-original="${escapeHtml(original)}"
+          ${inactive ? "disabled" : ""}></td>
+      </tr>`;
+  }).join("");
+
+  // 輸入事件：更新列底色與計數；Enter 跳下一格
+  const inputs = Array.from(tbody.querySelectorAll("input.recorder-input:not(:disabled)"));
+  inputs.forEach((input, idx) => {
+    input.addEventListener("input", () => {
+      input.closest("tr").classList.toggle("filled", input.value.trim() !== "");
+      updateRecorderFillCounter();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        (inputs[idx + 1] || input).focus();
+        if (inputs[idx + 1]) inputs[idx + 1].select();
+      }
+    });
+  });
+
+  updateRecorderFillCounter();
+}
+
+function updateRecorderFillCounter() {
+  const counter = document.getElementById("rfCounter");
+  if (!counter) return;
+  const inputs = Array.from(document.querySelectorAll("#rfTableBody input.recorder-input:not(:disabled)"));
+  const filled = inputs.filter((i) => i.value.trim() !== "").length;
+  counter.textContent = `已填 ${filled} / 共 ${inputs.length} 筆`;
+}
+
+async function saveRecorderFill() {
+  const inputs = Array.from(document.querySelectorAll("#rfTableBody input.recorder-input:not(:disabled)"));
+  const changed = [];
+  inputs.forEach((input) => {
+    const value = input.value.trim();
+    if (value === (input.dataset.original ?? "")) return;
+    const id = input.closest("tr").dataset.id;
+    const item = cases.find((c) => c.id === id);
+    if (!item) return;
+    item.recorder = value;
+    changed.push(item);
+  });
+
+  if (!changed.length) {
+    showToast("沒有需要儲存的變更");
+    return;
+  }
+
+  const saveBtn = document.getElementById("rfSave");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "儲存中…";
+
+  let ok = true;
+  if (supabaseClient) {
+    const { error } = await supabaseClient
+      .from("mediation_schedules")
+      .upsert(changed.map(toDbCase), { onConflict: "id" });
+    if (error) {
+      ok = false;
+      alert(`Supabase 儲存失敗：${error.message}`);
+    }
+  }
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = "儲存";
+  if (!ok) return;
+
+  persist();
+  render();
+  // 更新 original 基準，讓後續可以繼續填寫再儲存
+  inputs.forEach((input) => { input.dataset.original = input.value.trim(); });
+  showToast(`已更新 ${changed.length} 筆記錄人員`);
 }
