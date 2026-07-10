@@ -1,4 +1,4 @@
-console.log("app.js version: 20260710a");
+console.log("app.js version: 20260710b");
 const statusLabels = {
   reserved: "預約",
   scheduled: "已排定",
@@ -2138,7 +2138,7 @@ function openRecorderFillOverlay() {
         <table>
           <thead>
             <tr>
-              <th>日期</th><th>時間</th><th>地點</th><th>勞方</th><th>資方</th>
+              <th>日期</th><th>時間</th><th>地點</th><th>案號</th><th>勞方</th><th>資方</th>
               <th>調解人</th><th>承辦人</th><th>紀錄</th>
             </tr>
           </thead>
@@ -2218,7 +2218,7 @@ function renderRecorderFillTable() {
 
   const rows = getRecorderFillRows();
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">本週沒有案件</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">本週沒有案件</td></tr>`;
     updateRecorderFillCounter();
     return;
   }
@@ -2235,6 +2235,7 @@ function renderRecorderFillTable() {
         <td style="white-space:nowrap;">${formatMonthDay(d)}(${getWeekdayName(d).replace("週", "")})</td>
         <td>${escapeHtml(item.meetingTime)}</td>
         <td style="white-space:nowrap;">${escapeHtml(displayRoom(item))}</td>
+        <td style="white-space:nowrap;">${escapeHtml(item.caseNo || "")}</td>
         <td>${escapeHtml(inactive ? statusLabels[item.status] : item.worker)}</td>
         <td>${escapeHtml(inactive ? "" : item.employer)}</td>
         <td>${escapeHtml(inactive ? "" : getMediatorDisplay(item))}</td>
